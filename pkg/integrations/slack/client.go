@@ -167,6 +167,38 @@ func (c *Client) PostMessage(req ChatPostMessageRequest) (*ChatPostMessageRespon
 	return &result, nil
 }
 
+type ChatPostMessageWithBlocksRequest struct {
+	Channel string        `json:"channel"`
+	Text    string        `json:"text"`
+	Blocks  []interface{} `json:"blocks"`
+}
+
+func (c *Client) PostMessageWithBlocks(req ChatPostMessageWithBlocksRequest) (*ChatPostMessageResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	responseBody, err := c.execRequest(http.MethodPost, "https://slack.com/api/chat.postMessage", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	var result ChatPostMessageResponse
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	if !result.OK {
+		if result.Error != "" {
+			return nil, fmt.Errorf("failed to post message: %s", result.Error)
+		}
+		return nil, fmt.Errorf("failed to post message")
+	}
+
+	return &result, nil
+}
+
 func (c *Client) execRequest(method, URL string, body io.Reader) ([]byte, error) {
 	req, err := http.NewRequest(method, URL, body)
 	if err != nil {

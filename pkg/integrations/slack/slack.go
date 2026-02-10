@@ -106,6 +106,7 @@ func (s *Slack) HandleAction(ctx core.IntegrationActionContext) error {
 func (s *Slack) Components() []core.Component {
 	return []core.Component{
 		&SendTextMessage{},
+		&SendAndWaitForResponse{},
 	}
 }
 
@@ -357,7 +358,134 @@ func (s *Slack) handleChallenge(ctx core.HTTPRequestContext, payload EventPayloa
 }
 
 func (s *Slack) handleInteractivity(ctx core.HTTPRequestContext, body []byte) {
-	// TODO
+	// Slack sends interaction payloads as form-encoded data with a 'payload' field
+	payload := ctx.Request.FormValue("payload")
+	if payload == "" {
+		ctx.Logger.Errorf("missing payload in interaction request")
+		ctx.Response.WriteHeader(400)
+		return
+	}
+
+	var interaction map[string]any
+	err := json.Unmarshal([]byte(payload), &interaction)
+	if err != nil {
+		ctx.Logger.Errorf("error unmarshaling interaction payload: %v", err)
+		ctx.Response.WriteHeader(400)
+		return
+	}
+
+	interactionType, ok := interaction["type"].(string)
+	if !ok {
+		ctx.Logger.Errorf("missing or invalid type in interaction")
+		ctx.Response.WriteHeader(400)
+		return
+	}
+
+	// Handle block_actions (button clicks)
+	if interactionType == "block_actions" {
+		s.handleBlockAction(ctx, interaction)
+		return
+	}
+
+	ctx.Logger.Warnf("unsupported interaction type: %s", interactionType)
+	ctx.Response.WriteHeader(200)
+}
+
+type BlockActionPayload struct {
+	MessageTS     string
+	ResponseTS    string
+	SelectedValue string
+	User          map[string]any
+	ActionID      string
+}
+
+func (s *Slack) parseBlockActionPayload(interaction map[string]any) (*BlockActionPayload, error) {
+	// Extract message timestamp
+	message, ok := interaction["message"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("missing message in block action")
+	}
+
+	messageTS, ok := message["ts"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing ts in message")
+	}
+
+	// Extract actions
+	actions, ok := interaction["actions"].([]any)
+	if !ok || len(actions) == 0 {
+		return nil, fmt.Errorf("missing or empty actions in block action")
+	}
+
+	action, ok := actions[0].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid action format")
+	}
+
+	selectedValue, ok := action["value"].(string)
+	if !ok {
+		return nil, fmt.Errorf("missing value in action")
+	}
+
+	actionID, _ := action["action_id"].(string)
+
+	// Extract user info
+	user, _ := interaction["user"].(map[string]any)
+
+	// Get the response timestamp
+	responseTS, _ := interaction["action_ts"].(string)
+
+	return &BlockActionPayload{
+		MessageTS:     messageTS,
+		ResponseTS:    responseTS,
+		SelectedValue: selectedValue,
+		User:          user,
+		ActionID:      actionID,
+	}, nil
+}
+
+func (s *Slack) handleBlockAction(ctx core.HTTPRequestContext, interaction map[string]any) {
+	payload, err := s.parseBlockActionPayload(interaction)
+	if err != nil {
+		ctx.Logger.Errorf("error parsing block action payload: %v", err)
+		ctx.Response.WriteHeader(400)
+		return
+	}
+
+	// Get all subscriptions for this integration
+	subscriptions, err := ctx.Integration.ListSubscriptions()
+	if err != nil {
+		ctx.Logger.Errorf("error listing subscriptions: %v", err)
+		ctx.Response.WriteHeader(500)
+		return
+	}
+
+	// Build interaction message
+	interactionMessage := map[string]any{
+		"type":           "block_action",
+		"message_ts":     payload.MessageTS,
+		"response_ts":    payload.ResponseTS,
+		"selected_value": payload.SelectedValue,
+		"user":           payload.User,
+		"action_id":      payload.ActionID,
+	}
+
+	// Send to all subscriptions (components will filter based on their metadata)
+	handled := false
+	for _, subscription := range subscriptions {
+		err = subscription.SendMessage(interactionMessage)
+		if err != nil {
+			ctx.Logger.Errorf("error sending interaction message: %v", err)
+			continue
+		}
+		handled = true
+	}
+
+	if !handled {
+		ctx.Logger.Warnf("no subscriptions found for interaction")
+	}
+
+	ctx.Response.WriteHeader(200)
 }
 
 func (s *Slack) parseEventCallback(eventPayload EventPayload) (string, any, error) {
