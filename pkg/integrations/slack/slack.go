@@ -17,7 +17,10 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/superplanehq/superplane/pkg/configuration"
 	"github.com/superplanehq/superplane/pkg/core"
+	"github.com/superplanehq/superplane/pkg/database"
+	"github.com/superplanehq/superplane/pkg/models"
 	"github.com/superplanehq/superplane/pkg/registry"
+	"gorm.io/datatypes"
 )
 
 const (
@@ -453,25 +456,84 @@ func (s *Slack) handleBlockAction(ctx core.HTTPRequestContext, interaction map[s
 	}
 
 	// Find waiting executions for sendAndWaitForResponse component with matching messageTS
-	// We need to query the database to find executions that are waiting and match the message timestamp
-	// Then trigger the buttonClicked action on that execution
+	tx := database.Conn()
 	
-	// For now, we'll use the subscription mechanism but filter on component type
-	_, err = ctx.Integration.ListSubscriptions()
+	// Find nodes with the sendAndWaitForResponse component
+	var nodes []models.CanvasNode
+	err = tx.Where("component_name = ?", "slack.sendAndWaitForResponse").Find(&nodes).Error
 	if err != nil {
-		ctx.Logger.Errorf("error listing subscriptions: %v", err)
+		ctx.Logger.Errorf("error finding nodes: %v", err)
 		ctx.Response.WriteHeader(500)
 		return
 	}
 
-	// TODO: This won't work properly because subscriptions are for integration messages
-	// The proper solution would be to create a CanvasNodeRequest to trigger the buttonClicked action
-	// But we don't have access to that from the HTTP context
-	// As a workaround, we could store button clicks in a queue or use a different mechanism
-	
-	// For now, log the interaction for debugging
-	ctx.Logger.Infof("button click received: messageTS=%s, value=%s", payload.MessageTS, payload.SelectedValue)
-	
+	// For each node, find waiting executions with matching messageTS
+	for _, node := range nodes {
+		// Get the latest execution that is running (waiting for button click)
+		var execution models.CanvasNodeExecution
+		err = tx.Where("workflow_id = ? AND node_id = ? AND state = ?", 
+			node.WorkflowID, node.NodeID, models.CanvasNodeExecutionStateStarted).
+			Order("created_at DESC").
+			First(&execution).Error
+		if err != nil {
+			// No waiting execution for this node
+			continue
+		}
+
+		// Check if the metadata matches the messageTS
+		metadata := execution.Metadata.Data()
+		if metadata == nil {
+			continue
+		}
+
+		storedMessageTS, ok := metadata["messageTs"].(string)
+		if !ok || storedMessageTS != payload.MessageTS {
+			// Not a match
+			continue
+		}
+
+		// Check if the state is "waiting"
+		state, ok := metadata["state"].(string)
+		if !ok || state != "waiting" {
+			continue
+		}
+
+		// Found the matching execution! Create a node request to trigger the buttonClicked action
+		now := time.Now()
+		request := models.CanvasNodeRequest{
+			WorkflowID:  node.WorkflowID,
+			NodeID:      node.NodeID,
+			ExecutionID: &execution.ID,
+			State:       models.NodeExecutionRequestStatePending,
+			Type:        models.NodeRequestTypeInvokeAction,
+			Spec: datatypes.NewJSONType(models.NodeExecutionRequestSpec{
+				InvokeAction: &models.InvokeAction{
+					ActionName: "buttonClicked",
+					Parameters: map[string]any{
+						"value":      payload.SelectedValue,
+						"responseTs": payload.ResponseTS,
+						"user":       payload.User,
+					},
+				},
+			}),
+			RunAt:     now,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+
+		err = tx.Create(&request).Error
+		if err != nil {
+			ctx.Logger.Errorf("error creating node request: %v", err)
+			ctx.Response.WriteHeader(500)
+			return
+		}
+
+		ctx.Logger.Infof("button click routed to execution %s", execution.ID)
+		ctx.Response.WriteHeader(200)
+		return
+	}
+
+	ctx.Logger.Warnf("no matching waiting execution found for messageTS: %s", payload.MessageTS)
 	ctx.Response.WriteHeader(200)
 }
 
