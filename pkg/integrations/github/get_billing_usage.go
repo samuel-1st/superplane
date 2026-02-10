@@ -46,15 +46,15 @@ func (c *GetBillingUsage) Label() string {
 }
 
 func (c *GetBillingUsage) Description() string {
-	return "Retrieve billable GitHub Actions usage (minutes) for the organization or user account"
+	return "Retrieve billable GitHub Actions usage (minutes) for the organization"
 }
 
 func (c *GetBillingUsage) Documentation() string {
-	return `The Get Billing Usage component retrieves billable GitHub Actions usage (minutes) for the installation's organization or user account.
+	return `The Get Billing Usage component retrieves billable GitHub Actions usage (minutes) for the installation's organization.
 
 ## Prerequisites
 
-This action requires the GitHub App to have **Organization permission: Administration (read)** for organization accounts. For user accounts, the app needs appropriate permissions to access billing information. Existing installations must approve this new permission when prompted by GitHub. Until approved, this action will return a 403 error.
+This action requires the GitHub App to have **Organization permission: Administration (read)**. Existing installations must approve this new permission when prompted by GitHub. Until approved, this action will return a 403 error.
 
 **Note**: This component uses GitHub's enhanced billing usage report API, which provides detailed usage information and is the recommended approach for accessing billing data.
 
@@ -73,13 +73,11 @@ This component calls GitHub's usage report API to retrieve:
 - Optional per-repository breakdown when specific repositories are selected
 - Optional cost information (if available from the API)
 
-The component automatically detects whether the GitHub App is installed on an organization or user account and calls the appropriate API endpoint.
-
 **Note**: Only private repositories on GitHub-hosted runners accrue billable minutes. Public repos and self-hosted runners show zero billable usage.
 
 ## Configuration
 
-- **Repositories** (optional, multi-select): List of repositories to include. When empty, returns usage for all repos in the account. When one or more selected, scopes to those repos only.
+- **Repositories** (optional, multi-select): List of repositories to include. When empty, returns usage for all repos in the organization. When one or more selected, scopes to those repos only.
 - **Year** (optional): Year for billing period (e.g., "2026"). Defaults to current year.
 - **Month** (optional): Month for billing period (1-12). Defaults to current month.
 - **Day** (optional): Day for billing period (1-31). When specified, narrows to a specific day.
@@ -100,7 +98,7 @@ Returns usage data on the default output channel:
 
 Errors do not emit a payload. Common errors include:
 - **403 Forbidden**: Administration permission not granted on the installation
-- **404 Not Found**: Repository or account not found
+- **404 Not Found**: Repository or organization not found
 - **5xx errors**: GitHub API issues`
 }
 
