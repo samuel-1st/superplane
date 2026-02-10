@@ -46,15 +46,15 @@ func (c *GetBillingUsage) Label() string {
 }
 
 func (c *GetBillingUsage) Description() string {
-	return "Retrieve billable GitHub Actions usage (minutes) for the organization"
+	return "Retrieve billable GitHub Actions usage (minutes) for the organization or user account"
 }
 
 func (c *GetBillingUsage) Documentation() string {
-	return `The Get Billing Usage component retrieves billable GitHub Actions usage (minutes) for the installation's organization.
+	return `The Get Billing Usage component retrieves billable GitHub Actions usage (minutes) for the installation's organization or user account.
 
 ## Prerequisites
 
-This action requires the GitHub App to have **Organization permission: Administration (read)**. Existing installations must approve this new permission when prompted by GitHub. Until approved, this action will return a 403 error.
+This action requires the GitHub App to have **Organization permission: Administration (read)** for organization accounts. For user accounts, the app needs appropriate permissions to access billing information. Existing installations must approve this new permission when prompted by GitHub. Until approved, this action will return a 403 error.
 
 ## Use Cases
 
@@ -71,11 +71,13 @@ This component calls GitHub's billing usage API to retrieve:
 - Optional per-repository breakdown when specific repositories are selected
 - Optional cost information (if available from the API)
 
+The component automatically detects whether the GitHub App is installed on an organization or user account and calls the appropriate API endpoint.
+
 **Note**: Only private repositories on GitHub-hosted runners accrue billable minutes. Public repos and self-hosted runners show zero billable usage.
 
 ## Configuration
 
-- **Repositories** (optional, multi-select): List of repositories to include. When empty, returns usage for all repos in the organization. When one or more selected, scopes to those repos only.
+- **Repositories** (optional, multi-select): List of repositories to include. When empty, returns usage for all repos in the account. When one or more selected, scopes to those repos only.
 - **Year** (optional): Year for billing period (e.g., "2026"). Defaults to current year.
 - **Month** (optional): Month for billing period (1-12). Defaults to current month.
 - **Day** (optional): Day for billing period (1-31). When specified, narrows to a specific day.
@@ -96,7 +98,7 @@ Returns usage data on the default output channel:
 
 Errors do not emit a payload. Common errors include:
 - **403 Forbidden**: Administration permission not granted on the installation
-- **404 Not Found**: Repository or organization not found
+- **404 Not Found**: Repository or account not found
 - **5xx errors**: GitHub API issues`
 }
 
@@ -246,19 +248,32 @@ func (c *GetBillingUsage) Execute(ctx core.ExecutionContext) error {
 	var output BillingUsageOutput
 	output.MinutesUsedBreakdown = make(map[string]int64)
 
+	// Determine if account is an organization or user
+	isOrganization := appMetadata.OwnerType == "Organization"
+
 	// Determine if we should use simple billing or detailed usage report
 	useDetailedReport := len(config.Repositories) > 0 || config.Day != "" || config.SKU != ""
 
 	if useDetailedReport {
 		// Use detailed usage report API for filtering by repo/day/SKU
-		usage, err := c.getDetailedUsage(context.Background(), client, appMetadata.Owner, config)
+		var usage BillingUsageOutput
+		if isOrganization {
+			usage, err = c.getDetailedUsage(context.Background(), client, appMetadata.Owner, config)
+		} else {
+			usage, err = c.getDetailedUsageUser(context.Background(), client, appMetadata.Owner, config)
+		}
 		if err != nil {
 			return fmt.Errorf("failed to get detailed usage: %w", err)
 		}
 		output = usage
 	} else {
-		// Use simple billing API for org-wide summary
-		usage, err := c.getSimpleBilling(context.Background(), client, appMetadata.Owner)
+		// Use simple billing API for account-wide summary
+		var usage BillingUsageOutput
+		if isOrganization {
+			usage, err = c.getSimpleBilling(context.Background(), client, appMetadata.Owner)
+		} else {
+			usage, err = c.getSimpleBillingUser(context.Background(), client, appMetadata.Owner)
+		}
 		if err != nil {
 			return fmt.Errorf("failed to get billing summary: %w", err)
 		}
@@ -275,6 +290,26 @@ func (c *GetBillingUsage) Execute(ctx core.ExecutionContext) error {
 func (c *GetBillingUsage) getSimpleBilling(goCtx context.Context, client *github.Client, owner string) (BillingUsageOutput, error) {
 	// Use the simple billing API for Actions
 	billing, _, err := client.Billing.GetActionsBillingOrg(goCtx, owner)
+	if err != nil {
+		return BillingUsageOutput{}, fmt.Errorf("failed to get Actions billing: %w", err)
+	}
+
+	output := BillingUsageOutput{
+		MinutesUsed:          int64(billing.TotalMinutesUsed),
+		MinutesUsedBreakdown: make(map[string]int64),
+	}
+
+	// Convert breakdown from map[string]int to map[string]int64
+	for os, minutes := range billing.MinutesUsedBreakdown {
+		output.MinutesUsedBreakdown[os] = int64(minutes)
+	}
+
+	return output, nil
+}
+
+func (c *GetBillingUsage) getSimpleBillingUser(goCtx context.Context, client *github.Client, user string) (BillingUsageOutput, error) {
+	// Use the simple billing API for Actions (user account)
+	billing, _, err := client.Billing.GetActionsBillingUser(goCtx, user)
 	if err != nil {
 		return BillingUsageOutput{}, fmt.Errorf("failed to get Actions billing: %w", err)
 	}
@@ -312,6 +347,109 @@ func (c *GetBillingUsage) getDetailedUsage(goCtx context.Context, client *github
 
 	// Get usage report
 	report, _, err := client.Billing.GetUsageReportOrg(goCtx, owner, opts)
+	if err != nil {
+		return BillingUsageOutput{}, fmt.Errorf("failed to get usage report: %w", err)
+	}
+
+	output := BillingUsageOutput{
+		MinutesUsedBreakdown: make(map[string]int64),
+	}
+
+	// Track repositories if needed
+	repoUsageMap := make(map[string]*RepositoryUsage)
+
+	// Process usage items
+	for _, item := range report.UsageItems {
+		// Filter by product if not actions
+		if config.Product != "" && config.Product != "actions" && item.GetProduct() != config.Product {
+			continue
+		}
+
+		// Only process Actions-related items
+		if item.GetProduct() != "actions" {
+			continue
+		}
+
+		// Filter by SKU if specified
+		if config.SKU != "" && item.GetSKU() != config.SKU {
+			continue
+		}
+
+		// Filter by repository if specified
+		repoName := item.GetRepositoryName()
+		if len(config.Repositories) > 0 {
+			found := false
+			for _, repo := range config.Repositories {
+				if repoName == repo {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		quantity := item.GetQuantity()
+		if quantity == nil {
+			continue
+		}
+		quantityInt := int64(*quantity)
+		sku := item.GetSKU()
+
+		// Add to totals
+		output.MinutesUsed += quantityInt
+		output.MinutesUsedBreakdown[sku] += quantityInt
+
+		// Add cost if available
+		if item.NetAmount != nil {
+			output.TotalCost += *item.NetAmount
+		}
+
+		// Track per-repository breakdown if we have multiple repos or filtering by repos
+		if len(config.Repositories) > 0 && repoName != "" {
+			if repoUsageMap[repoName] == nil {
+				repoUsageMap[repoName] = &RepositoryUsage{
+					RepositoryName: repoName,
+					Breakdown:      make(map[string]int64),
+				}
+			}
+			repoUsageMap[repoName].MinutesUsed += quantityInt
+			repoUsageMap[repoName].Breakdown[sku] += quantityInt
+		}
+	}
+
+	// Convert repo map to slice
+	if len(repoUsageMap) > 0 {
+		output.RepositoryBreakdown = []RepositoryUsage{}
+		for _, repoUsage := range repoUsageMap {
+			output.RepositoryBreakdown = append(output.RepositoryBreakdown, *repoUsage)
+		}
+	}
+
+	return output, nil
+}
+
+func (c *GetBillingUsage) getDetailedUsageUser(goCtx context.Context, client *github.Client, user string, config GetBillingUsageConfiguration) (BillingUsageOutput, error) {
+	// Build options for the usage report API
+	opts := &github.UsageReportOptions{}
+
+	// Note: Year, Month, and Day are already validated in Setup(), so errors can be safely ignored here
+	if config.Year != "" {
+		year, _ := strconv.Atoi(config.Year)
+		opts.Year = &year
+	}
+	if config.Month != "" {
+		month, _ := strconv.Atoi(config.Month)
+		opts.Month = &month
+	}
+	if config.Day != "" {
+		day, _ := strconv.Atoi(config.Day)
+		opts.Day = &day
+	}
+
+	// Get usage report for user
+	report, _, err := client.Billing.GetUsageReportUser(goCtx, user, opts)
 	if err != nil {
 		return BillingUsageOutput{}, fmt.Errorf("failed to get usage report: %w", err)
 	}
