@@ -456,84 +456,62 @@ func (s *Slack) handleBlockAction(ctx core.HTTPRequestContext, interaction map[s
 	}
 
 	// Find waiting executions for sendAndWaitForResponse component with matching messageTS
+	// Use a single query with a JOIN to avoid N+1 queries
 	tx := database.Conn()
-	
-	// Find nodes with the sendAndWaitForResponse component
-	var nodes []models.CanvasNode
-	err = tx.Where("component_name = ?", "slack.sendAndWaitForResponse").Find(&nodes).Error
+
+	var execution models.CanvasNodeExecution
+	err = tx.Table("workflow_node_executions").
+		Select("workflow_node_executions.*").
+		Joins("JOIN workflow_nodes ON workflow_node_executions.workflow_id = workflow_nodes.workflow_id AND workflow_node_executions.node_id = workflow_nodes.node_id").
+		Where("workflow_nodes.component_name = ?", "slack.sendAndWaitForResponse").
+		Where("workflow_node_executions.state = ?", models.CanvasNodeExecutionStateStarted).
+		Where("workflow_node_executions.metadata->>'messageTs' = ?", payload.MessageTS).
+		Where("workflow_node_executions.metadata->>'state' = ?", "waiting").
+		Order("workflow_node_executions.created_at DESC").
+		First(&execution).Error
+
 	if err != nil {
-		ctx.Logger.Errorf("error finding nodes: %v", err)
+		if err.Error() == "record not found" {
+			ctx.Logger.Warnf("no matching waiting execution found for messageTS: %s", payload.MessageTS)
+			ctx.Response.WriteHeader(200)
+			return
+		}
+		ctx.Logger.Errorf("error finding execution: %v", err)
 		ctx.Response.WriteHeader(500)
 		return
 	}
 
-	// For each node, find waiting executions with matching messageTS
-	for _, node := range nodes {
-		// Get the latest execution that is running (waiting for button click)
-		var execution models.CanvasNodeExecution
-		err = tx.Where("workflow_id = ? AND node_id = ? AND state = ?", 
-			node.WorkflowID, node.NodeID, models.CanvasNodeExecutionStateStarted).
-			Order("created_at DESC").
-			First(&execution).Error
-		if err != nil {
-			// No waiting execution for this node
-			continue
-		}
-
-		// Check if the metadata matches the messageTS
-		metadata := execution.Metadata.Data()
-		if metadata == nil {
-			continue
-		}
-
-		storedMessageTS, ok := metadata["messageTs"].(string)
-		if !ok || storedMessageTS != payload.MessageTS {
-			// Not a match
-			continue
-		}
-
-		// Check if the state is "waiting"
-		state, ok := metadata["state"].(string)
-		if !ok || state != "waiting" {
-			continue
-		}
-
-		// Found the matching execution! Create a node request to trigger the buttonClicked action
-		now := time.Now()
-		request := models.CanvasNodeRequest{
-			WorkflowID:  node.WorkflowID,
-			NodeID:      node.NodeID,
-			ExecutionID: &execution.ID,
-			State:       models.NodeExecutionRequestStatePending,
-			Type:        models.NodeRequestTypeInvokeAction,
-			Spec: datatypes.NewJSONType(models.NodeExecutionRequestSpec{
-				InvokeAction: &models.InvokeAction{
-					ActionName: "buttonClicked",
-					Parameters: map[string]any{
-						"value":      payload.SelectedValue,
-						"responseTs": payload.ResponseTS,
-						"user":       payload.User,
-					},
+	// Found the matching execution! Create a node request to trigger the buttonClicked action
+	now := time.Now()
+	request := models.CanvasNodeRequest{
+		WorkflowID:  execution.WorkflowID,
+		NodeID:      execution.NodeID,
+		ExecutionID: &execution.ID,
+		State:       models.NodeExecutionRequestStatePending,
+		Type:        models.NodeRequestTypeInvokeAction,
+		Spec: datatypes.NewJSONType(models.NodeExecutionRequestSpec{
+			InvokeAction: &models.InvokeAction{
+				ActionName: "buttonClicked",
+				Parameters: map[string]any{
+					"value":      payload.SelectedValue,
+					"responseTs": payload.ResponseTS,
+					"user":       payload.User,
 				},
-			}),
-			RunAt:     now,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
+			},
+		}),
+		RunAt:     now,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
 
-		err = tx.Create(&request).Error
-		if err != nil {
-			ctx.Logger.Errorf("error creating node request: %v", err)
-			ctx.Response.WriteHeader(500)
-			return
-		}
-
-		ctx.Logger.Infof("button click routed to execution %s", execution.ID)
-		ctx.Response.WriteHeader(200)
+	err = tx.Create(&request).Error
+	if err != nil {
+		ctx.Logger.Errorf("error creating node request: %v", err)
+		ctx.Response.WriteHeader(500)
 		return
 	}
 
-	ctx.Logger.Warnf("no matching waiting execution found for messageTS: %s", payload.MessageTS)
+	ctx.Logger.Infof("button click routed to execution %s", execution.ID)
 	ctx.Response.WriteHeader(200)
 }
 

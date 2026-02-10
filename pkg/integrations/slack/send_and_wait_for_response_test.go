@@ -29,8 +29,8 @@ func Test__SendAndWaitForResponse__Setup(t *testing.T) {
 
 	t.Run("missing channel -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
-			Integration:   &contexts.IntegrationContext{},
-			Metadata:      &contexts.MetadataContext{},
+			Integration: &contexts.IntegrationContext{},
+			Metadata:    &contexts.MetadataContext{},
 			Configuration: map[string]any{
 				"channel": "",
 				"message": "test",
@@ -43,8 +43,8 @@ func Test__SendAndWaitForResponse__Setup(t *testing.T) {
 
 	t.Run("missing message -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
-			Integration:   &contexts.IntegrationContext{},
-			Metadata:      &contexts.MetadataContext{},
+			Integration: &contexts.IntegrationContext{},
+			Metadata:    &contexts.MetadataContext{},
 			Configuration: map[string]any{
 				"channel": "C123",
 				"message": "",
@@ -57,8 +57,8 @@ func Test__SendAndWaitForResponse__Setup(t *testing.T) {
 
 	t.Run("no buttons -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
-			Integration:   &contexts.IntegrationContext{},
-			Metadata:      &contexts.MetadataContext{},
+			Integration: &contexts.IntegrationContext{},
+			Metadata:    &contexts.MetadataContext{},
 			Configuration: map[string]any{
 				"channel": "C123",
 				"message": "test",
@@ -71,8 +71,8 @@ func Test__SendAndWaitForResponse__Setup(t *testing.T) {
 
 	t.Run("too many buttons -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
-			Integration:   &contexts.IntegrationContext{},
-			Metadata:      &contexts.MetadataContext{},
+			Integration: &contexts.IntegrationContext{},
+			Metadata:    &contexts.MetadataContext{},
 			Configuration: map[string]any{
 				"channel": "C123",
 				"message": "test",
@@ -91,8 +91,8 @@ func Test__SendAndWaitForResponse__Setup(t *testing.T) {
 
 	t.Run("button missing name -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
-			Integration:   &contexts.IntegrationContext{},
-			Metadata:      &contexts.MetadataContext{},
+			Integration: &contexts.IntegrationContext{},
+			Metadata:    &contexts.MetadataContext{},
 			Configuration: map[string]any{
 				"channel": "C123",
 				"message": "test",
@@ -105,8 +105,8 @@ func Test__SendAndWaitForResponse__Setup(t *testing.T) {
 
 	t.Run("button missing value -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
-			Integration:   &contexts.IntegrationContext{},
-			Metadata:      &contexts.MetadataContext{},
+			Integration: &contexts.IntegrationContext{},
+			Metadata:    &contexts.MetadataContext{},
 			Configuration: map[string]any{
 				"channel": "C123",
 				"message": "test",

@@ -168,9 +168,9 @@ func (c *Client) PostMessage(req ChatPostMessageRequest) (*ChatPostMessageRespon
 }
 
 type ChatPostMessageWithBlocksRequest struct {
-	Channel string        `json:"channel"`
-	Text    string        `json:"text"`
-	Blocks  []interface{} `json:"blocks"`
+	Channel string `json:"channel"`
+	Text    string `json:"text"`
+	Blocks  []any  `json:"blocks"`
 }
 
 func (c *Client) PostMessageWithBlocks(req ChatPostMessageWithBlocksRequest) (*ChatPostMessageResponse, error) {

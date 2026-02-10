@@ -31,12 +31,12 @@ type Button struct {
 }
 
 type SendAndWaitForResponseMetadata struct {
-	Channel           *ChannelMetadata `json:"channel,omitempty" mapstructure:"channel,omitempty"`
-	MessageTS         string           `json:"messageTs,omitempty" mapstructure:"messageTs,omitempty"`
-	ResponseTS        string           `json:"responseTs,omitempty" mapstructure:"responseTs,omitempty"`
-	SelectedValue     string           `json:"selectedValue,omitempty" mapstructure:"selectedValue,omitempty"`
-	State             string           `json:"state" mapstructure:"state"`
-	SubscriptionID    *string          `json:"subscriptionId,omitempty" mapstructure:"subscriptionId,omitempty"`
+	Channel        *ChannelMetadata `json:"channel,omitempty" mapstructure:"channel,omitempty"`
+	MessageTS      string           `json:"messageTs,omitempty" mapstructure:"messageTs,omitempty"`
+	ResponseTS     string           `json:"responseTs,omitempty" mapstructure:"responseTs,omitempty"`
+	SelectedValue  string           `json:"selectedValue,omitempty" mapstructure:"selectedValue,omitempty"`
+	State          string           `json:"state" mapstructure:"state"`
+	SubscriptionID *string          `json:"subscriptionId,omitempty" mapstructure:"subscriptionId,omitempty"`
 }
 
 func (c *SendAndWaitForResponse) Name() string {
@@ -412,4 +412,3 @@ func (c *SendAndWaitForResponse) Cancel(ctx core.ExecutionContext) error {
 func (c *SendAndWaitForResponse) Cleanup(ctx core.SetupContext) error {
 	return nil
 }
-
