@@ -56,6 +56,8 @@ func (c *GetBillingUsage) Documentation() string {
 
 This action requires the GitHub App to have **Organization permission: Administration (read)** for organization accounts. For user accounts, the app needs appropriate permissions to access billing information. Existing installations must approve this new permission when prompted by GitHub. Until approved, this action will return a 403 error.
 
+**Note**: This component uses GitHub's enhanced billing usage report API, which provides detailed usage information and is the recommended approach for accessing billing data.
+
 ## Use Cases
 
 - **Billing monitoring**: Check Actions usage for billing or quota from SuperPlane workflows
@@ -65,7 +67,7 @@ This action requires the GitHub App to have **Organization permission: Administr
 
 ## How It Works
 
-This component calls GitHub's billing usage API to retrieve:
+This component calls GitHub's usage report API to retrieve:
 - Total billable minutes for the specified time period
 - Breakdown by runner OS (Linux, Windows, macOS)
 - Optional per-repository breakdown when specific repositories are selected
@@ -251,80 +253,24 @@ func (c *GetBillingUsage) Execute(ctx core.ExecutionContext) error {
 	// Determine if account is an organization or user
 	isOrganization := appMetadata.OwnerType == "Organization"
 
-	// Determine if we should use simple billing or detailed usage report
-	useDetailedReport := len(config.Repositories) > 0 || config.Day != "" || config.SKU != ""
-
-	if useDetailedReport {
-		// Use detailed usage report API for filtering by repo/day/SKU
-		var usage BillingUsageOutput
-		if isOrganization {
-			usage, err = c.getDetailedUsage(context.Background(), client, appMetadata.Owner, config)
-		} else {
-			usage, err = c.getDetailedUsageUser(context.Background(), client, appMetadata.Owner, config)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to get detailed usage: %w", err)
-		}
-		output = usage
+	// Always use detailed usage report API as the simple billing endpoints are deprecated/unreliable
+	// The usage report API works for both filtered and unfiltered queries
+	var usage BillingUsageOutput
+	if isOrganization {
+		usage, err = c.getDetailedUsage(context.Background(), client, appMetadata.Owner, config)
 	} else {
-		// Use simple billing API for account-wide summary
-		var usage BillingUsageOutput
-		if isOrganization {
-			usage, err = c.getSimpleBilling(context.Background(), client, appMetadata.Owner)
-		} else {
-			usage, err = c.getSimpleBillingUser(context.Background(), client, appMetadata.Owner)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to get billing summary: %w", err)
-		}
-		output = usage
+		usage, err = c.getDetailedUsageUser(context.Background(), client, appMetadata.Owner, config)
 	}
+	if err != nil {
+		return fmt.Errorf("failed to get usage data: %w", err)
+	}
+	output = usage
 
 	return ctx.ExecutionState.Emit(
 		core.DefaultOutputChannel.Name,
 		"github.billing.usage",
 		[]any{output},
 	)
-}
-
-func (c *GetBillingUsage) getSimpleBilling(goCtx context.Context, client *github.Client, owner string) (BillingUsageOutput, error) {
-	// Use the simple billing API for Actions
-	billing, _, err := client.Billing.GetActionsBillingOrg(goCtx, owner)
-	if err != nil {
-		return BillingUsageOutput{}, fmt.Errorf("failed to get Actions billing: %w", err)
-	}
-
-	output := BillingUsageOutput{
-		MinutesUsed:          int64(billing.TotalMinutesUsed),
-		MinutesUsedBreakdown: make(map[string]int64),
-	}
-
-	// Convert breakdown from map[string]int to map[string]int64
-	for os, minutes := range billing.MinutesUsedBreakdown {
-		output.MinutesUsedBreakdown[os] = int64(minutes)
-	}
-
-	return output, nil
-}
-
-func (c *GetBillingUsage) getSimpleBillingUser(goCtx context.Context, client *github.Client, user string) (BillingUsageOutput, error) {
-	// Use the simple billing API for Actions (user account)
-	billing, _, err := client.Billing.GetActionsBillingUser(goCtx, user)
-	if err != nil {
-		return BillingUsageOutput{}, fmt.Errorf("failed to get Actions billing: %w", err)
-	}
-
-	output := BillingUsageOutput{
-		MinutesUsed:          int64(billing.TotalMinutesUsed),
-		MinutesUsedBreakdown: make(map[string]int64),
-	}
-
-	// Convert breakdown from map[string]int to map[string]int64
-	for os, minutes := range billing.MinutesUsedBreakdown {
-		output.MinutesUsedBreakdown[os] = int64(minutes)
-	}
-
-	return output, nil
 }
 
 func (c *GetBillingUsage) getDetailedUsage(goCtx context.Context, client *github.Client, owner string, config GetBillingUsageConfiguration) (BillingUsageOutput, error) {
