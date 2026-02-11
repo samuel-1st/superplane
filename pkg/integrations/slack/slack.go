@@ -36,6 +36,7 @@ To complete the Slack app setup:
 5.  **Get Bot Token**: In "OAuth & Permissions", copy the "**Bot User OAuth Token**"
 6.  **Update Configuration**: Paste the "Bot User OAuth Token" and "Signing Secret" into the app installation configuration fields in SuperPlane and save
 `
+	apiBasePath = "/api/v1"
 )
 
 func init() {
@@ -205,7 +206,7 @@ func (s *Slack) appManifest(ctx core.SyncContext) ([]byte, error) {
 	if publicPath := os.Getenv("PUBLIC_API_BASE_PATH"); publicPath != "" {
 		// Only append the public path if it's not /api/v1 (which we add later in request URLs)
 		// and if the URL doesn't already contain it
-		if publicPath != "/api/v1" && !strings.Contains(appURL, publicPath) {
+		if publicPath != apiBasePath && !strings.Contains(appURL, publicPath) {
 			appURL = strings.TrimRight(appURL, "/") + "/" + strings.TrimLeft(publicPath, "/")
 		}
 	}
@@ -264,7 +265,7 @@ func (s *Slack) appManifest(ctx core.SyncContext) ([]byte, error) {
 		},
 		"settings": map[string]any{
 			"event_subscriptions": map[string]any{
-				"request_url": fmt.Sprintf("%s/api/v1/integrations/%s/events", appURL, ctx.Integration.ID().String()),
+				"request_url": fmt.Sprintf("%s%s/integrations/%s/events", appURL, apiBasePath, ctx.Integration.ID().String()),
 				"bot_events": []string{
 					"app_mention",
 					"reaction_added",
@@ -277,7 +278,7 @@ func (s *Slack) appManifest(ctx core.SyncContext) ([]byte, error) {
 			},
 			"interactivity": map[string]any{
 				"is_enabled":  true,
-				"request_url": fmt.Sprintf("%s/api/v1/integrations/%s/interactions", appURL, ctx.Integration.ID().String()),
+				"request_url": fmt.Sprintf("%s%s/integrations/%s/interactions", appURL, apiBasePath, ctx.Integration.ID().String()),
 			},
 			"org_deploy_enabled":  false,
 			"socket_mode_enabled": false,
