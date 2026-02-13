@@ -480,8 +480,8 @@ func (e *CanvasNodeExecution) FailInTransaction(tx *gorm.DB, reason, message str
 	// This ensures that any subsequent Save() calls won't overwrite these changes
 	e.State = CanvasNodeExecutionStateFinished
 	e.Result = CanvasNodeExecutionResultFailed
-	e.ResultReason = &reason
-	e.ResultMessage = &message
+	e.ResultReason = reason
+	e.ResultMessage = message
 	e.UpdatedAt = &now
 
 	//
