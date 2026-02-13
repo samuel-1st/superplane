@@ -480,6 +480,7 @@ message CanvasEvent {
   string custom_name = 5;
   google.protobuf.Struct data = 6;
   google.protobuf.Timestamp created_at = 7;
+  string state = 8;
 }
 
 message CanvasEventWithExecutions {
@@ -491,6 +492,7 @@ message CanvasEventWithExecutions {
   google.protobuf.Timestamp created_at = 6;
   repeated CanvasNodeExecution executions = 7;
   string custom_name = 8;
+  string state = 9;
 }
 
 message ListEventExecutionsRequest {
