@@ -165,6 +165,37 @@ func (c *WaitForButtonClick) Configuration() []configuration.Field {
 	}
 }
 
+// validateButtons checks button configuration for common errors
+func validateButtons(buttons []Button) error {
+	if len(buttons) == 0 {
+		return errors.New("at least one button is required")
+	}
+
+	if len(buttons) > 4 {
+		return errors.New("maximum of 4 buttons allowed")
+	}
+
+	for i, button := range buttons {
+		if button.Name == "" {
+			return fmt.Errorf("button %d: name is required", i)
+		}
+		if button.Value == "" {
+			return fmt.Errorf("button %d: value is required", i)
+		}
+	}
+
+	// Check for duplicate button values
+	buttonValues := make(map[string]bool)
+	for i, button := range buttons {
+		if buttonValues[button.Value] {
+			return fmt.Errorf("button %d: duplicate value '%s' - each button must have a unique value", i, button.Value)
+		}
+		buttonValues[button.Value] = true
+	}
+
+	return nil
+}
+
 func (c *WaitForButtonClick) Setup(ctx core.SetupContext) error {
 	var config WaitForButtonClickConfiguration
 	if err := mapstructure.Decode(ctx.Configuration, &config); err != nil {
@@ -179,30 +210,8 @@ func (c *WaitForButtonClick) Setup(ctx core.SetupContext) error {
 		return errors.New("message is required")
 	}
 
-	if len(config.Buttons) == 0 {
-		return errors.New("at least one button is required")
-	}
-
-	if len(config.Buttons) > 4 {
-		return errors.New("maximum of 4 buttons allowed")
-	}
-
-	for i, button := range config.Buttons {
-		if button.Name == "" {
-			return fmt.Errorf("button %d: name is required", i)
-		}
-		if button.Value == "" {
-			return fmt.Errorf("button %d: value is required", i)
-		}
-	}
-
-	// Check for duplicate button values
-	buttonValues := make(map[string]bool)
-	for i, button := range config.Buttons {
-		if buttonValues[button.Value] {
-			return fmt.Errorf("button %d: duplicate value '%s' - each button must have a unique value", i, button.Value)
-		}
-		buttonValues[button.Value] = true
+	if err := validateButtons(config.Buttons); err != nil {
+		return err
 	}
 
 	client, err := NewClient(ctx.Integration)
@@ -243,30 +252,8 @@ func (c *WaitForButtonClick) Execute(ctx core.ExecutionContext) error {
 		return errors.New("message is required")
 	}
 
-	if len(config.Buttons) == 0 {
-		return errors.New("at least one button is required")
-	}
-
-	if len(config.Buttons) > 4 {
-		return errors.New("maximum of 4 buttons allowed")
-	}
-
-	for i, button := range config.Buttons {
-		if button.Name == "" {
-			return fmt.Errorf("button %d: name is required", i)
-		}
-		if button.Value == "" {
-			return fmt.Errorf("button %d: value is required", i)
-		}
-	}
-
-	// Check for duplicate button values
-	buttonValues := make(map[string]bool)
-	for i, button := range config.Buttons {
-		if buttonValues[button.Value] {
-			return fmt.Errorf("button %d: duplicate value '%s' - each button must have a unique value", i, button.Value)
-		}
-		buttonValues[button.Value] = true
+	if err := validateButtons(config.Buttons); err != nil {
+		return err
 	}
 
 	client, err := NewClient(ctx.Integration)
