@@ -3226,6 +3226,9 @@
         "createdAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "state": {
+          "type": "string"
         }
       }
     },
@@ -3259,6 +3262,9 @@
           }
         },
         "customName": {
+          "type": "string"
+        },
+        "state": {
           "type": "string"
         }
       }
