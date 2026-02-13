@@ -445,6 +445,12 @@ func (e *CanvasNodeExecution) PassInTransaction(tx *gorm.DB, channelOutputs map[
 		return nil, err
 	}
 
+	// Update the struct fields to match the database state
+	// This ensures that any subsequent Save() calls won't overwrite these changes
+	e.State = CanvasNodeExecutionStateFinished
+	e.Result = CanvasNodeExecutionResultPassed
+	e.UpdatedAt = &now
+
 	return events, nil
 }
 
@@ -469,6 +475,14 @@ func (e *CanvasNodeExecution) FailInTransaction(tx *gorm.DB, reason, message str
 	if err != nil {
 		return err
 	}
+
+	// Update the struct fields to match the database state
+	// This ensures that any subsequent Save() calls won't overwrite these changes
+	e.State = CanvasNodeExecutionStateFinished
+	e.Result = CanvasNodeExecutionResultFailed
+	e.ResultReason = &reason
+	e.ResultMessage = &message
+	e.UpdatedAt = &now
 
 	//
 	// Update the workflow node state to ready.
