@@ -443,12 +443,7 @@ func (s *Slack) handleInteractivity(ctx core.HTTPRequestContext, body []byte) {
 		return
 	}
 
-	// Use generic query to find subscription by Slack-specific fields
-	subscription, err := models.FindIntegrationSubscriptionByConfigFields(database.Conn(), ctx.Integration.ID(), map[string]string{
-		"message_ts": messageTS,
-		"channel_id": channelID,
-		"type":       "button_click",
-	})
+	subscription, err := findButtonClickSubscription(database.Conn(), ctx.Integration.ID(), messageTS, channelID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			ctx.Logger.Warnf("no subscription found for message_ts %s", messageTS)
@@ -493,6 +488,24 @@ func (s *Slack) handleInteractivity(ctx core.HTTPRequestContext, body []byte) {
 	}
 
 	ctx.Response.WriteHeader(http.StatusOK)
+}
+
+func findButtonClickSubscriptionQuery(tx *gorm.DB, installationID uuid.UUID, messageTS, channelID string) *gorm.DB {
+	return tx.
+		Where("installation_id = ?", installationID).
+		Where("configuration->>'type' = ?", "button_click").
+		Where("configuration->>'message_ts' = ?", messageTS).
+		Where("configuration->>'channel_id' = ?", channelID)
+}
+
+func findButtonClickSubscription(tx *gorm.DB, installationID uuid.UUID, messageTS, channelID string) (*models.IntegrationSubscription, error) {
+	var subscription models.IntegrationSubscription
+	err := findButtonClickSubscriptionQuery(tx, installationID, messageTS, channelID).First(&subscription).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &subscription, nil
 }
 
 func (s *Slack) createButtonClickAction(executionID uuid.UUID, buttonValue string) error {
