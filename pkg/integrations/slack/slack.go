@@ -490,15 +490,17 @@ func (s *Slack) handleInteractivity(ctx core.HTTPRequestContext, body []byte) {
 	ctx.Response.WriteHeader(http.StatusOK)
 }
 
-func findButtonClickSubscription(tx *gorm.DB, installationID uuid.UUID, messageTS, channelID string) (*models.IntegrationSubscription, error) {
-	var subscription models.IntegrationSubscription
-	err := tx.
+func findButtonClickSubscriptionQuery(tx *gorm.DB, installationID uuid.UUID, messageTS, channelID string) *gorm.DB {
+	return tx.
 		Where("installation_id = ?", installationID).
 		Where("configuration->>'type' = ?", "button_click").
 		Where("configuration->>'message_ts' = ?", messageTS).
-		Where("configuration->>'channel_id' = ?", channelID).
-		First(&subscription).
-		Error
+		Where("configuration->>'channel_id' = ?", channelID)
+}
+
+func findButtonClickSubscription(tx *gorm.DB, installationID uuid.UUID, messageTS, channelID string) (*models.IntegrationSubscription, error) {
+	var subscription models.IntegrationSubscription
+	err := findButtonClickSubscriptionQuery(tx, installationID, messageTS, channelID).First(&subscription).Error
 	if err != nil {
 		return nil, err
 	}
