@@ -400,3 +400,18 @@ func (c *IntegrationContext) ListSubscriptions() ([]core.IntegrationSubscription
 
 	return contexts, nil
 }
+
+func (c *IntegrationContext) FindSubscription(predicate func(core.IntegrationSubscriptionContext) bool) (core.IntegrationSubscriptionContext, error) {
+	subscriptions, err := c.ListSubscriptions()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, subscription := range subscriptions {
+		if predicate(subscription) {
+			return subscription, nil
+		}
+	}
+
+	return nil, nil
+}
