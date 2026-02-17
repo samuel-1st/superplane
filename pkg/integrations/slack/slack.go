@@ -442,9 +442,18 @@ func (s *Slack) handleInteractivity(ctx core.HTTPRequestContext, body []byte) {
 			return false
 		}
 
-		subscriptionType, _ := config["type"].(string)
-		subscriptionMessageTS, _ := config["message_ts"].(string)
-		subscriptionChannelID, _ := config["channel_id"].(string)
+		subscriptionType, ok := config["type"].(string)
+		if !ok {
+			return false
+		}
+		subscriptionMessageTS, ok := config["message_ts"].(string)
+		if !ok {
+			return false
+		}
+		subscriptionChannelID, ok := config["channel_id"].(string)
+		if !ok {
+			return false
+		}
 
 		return subscriptionType == "button_click" &&
 			subscriptionMessageTS == messageTS &&
