@@ -9,6 +9,8 @@ import (
 )
 
 func Test__GetWorkflowUsage__Setup(t *testing.T) {
+	helloRepo := Repository{ID: 123456, Name: "hello", URL: "https://github.com/testhq/hello"}
+	worldRepo := Repository{ID: 123457, Name: "world", URL: "https://github.com/testhq/world"}
 	component := GetWorkflowUsage{}
 
 	t.Run("setup succeeds with no configuration", func(t *testing.T) {
@@ -20,6 +22,51 @@ func Test__GetWorkflowUsage__Setup(t *testing.T) {
 		})
 
 		require.NoError(t, err)
+	})
+
+	t.Run("setup succeeds with empty repositories", func(t *testing.T) {
+		integrationCtx := &contexts.IntegrationContext{
+			Metadata: Metadata{
+				Repositories: []Repository{helloRepo, worldRepo},
+			},
+		}
+		err := component.Setup(core.SetupContext{
+			Integration:   integrationCtx,
+			Metadata:      &contexts.MetadataContext{},
+			Configuration: map[string]any{"repositories": []string{}},
+		})
+
+		require.NoError(t, err)
+	})
+
+	t.Run("setup succeeds with valid repositories", func(t *testing.T) {
+		integrationCtx := &contexts.IntegrationContext{
+			Metadata: Metadata{
+				Repositories: []Repository{helloRepo, worldRepo},
+			},
+		}
+		err := component.Setup(core.SetupContext{
+			Integration:   integrationCtx,
+			Metadata:      &contexts.MetadataContext{},
+			Configuration: map[string]any{"repositories": []string{"hello", "world"}},
+		})
+
+		require.NoError(t, err)
+	})
+
+	t.Run("setup fails when repository is not accessible", func(t *testing.T) {
+		integrationCtx := &contexts.IntegrationContext{
+			Metadata: Metadata{
+				Repositories: []Repository{helloRepo},
+			},
+		}
+		err := component.Setup(core.SetupContext{
+			Integration:   integrationCtx,
+			Metadata:      &contexts.MetadataContext{},
+			Configuration: map[string]any{"repositories": []string{"hello", "notfound"}},
+		})
+
+		require.ErrorContains(t, err, "repository notfound is not accessible")
 	})
 }
 

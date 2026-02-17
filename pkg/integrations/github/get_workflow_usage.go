@@ -23,6 +23,7 @@ var getWorkflowUsageExampleOutputOnce sync.Once
 var getWorkflowUsageExampleOutput map[string]any
 
 type GetWorkflowUsageConfiguration struct {
+	Repositories []string `mapstructure:"repositories"`
 }
 
 type WorkflowUsageResult struct {
@@ -49,43 +50,44 @@ func (g *GetWorkflowUsage) Documentation() string {
 
 ## Prerequisites
 
-This action calls GitHub's **billing usage** API, which requires the GitHub App to have **Organization permission: Administration (read)**. 
+This action calls GitHub's **billing usage** API, which requires the GitHub App to have **Organization permission: Organization administration (read)**. 
 
 **Important**: Existing installations will need to approve the new permission when prompted by GitHub. Until the permission is granted, this action will return a 403 error.
 
 ## Behavior
 
-- Returns billing data for the **current billing cycle** only
+- Returns billing data for the **current billing cycle** using GitHub's enhanced billing API
 - Only private repositories on GitHub-hosted runners accrue billable minutes
 - Public repositories and self-hosted runners show zero billable usage
-- Usage is aggregated at the organization level
-- Cannot filter by specific repositories, time period, or runner OS (returns all data for current cycle)
+- Usage can be filtered by a specific repository or retrieved organization-wide
 
 ## Configuration
 
-No configuration fields required - this component automatically retrieves organization-wide billing data.
+- **Repositories** (optional, multiselect): Select one or more specific repositories to check usage for. Leave empty for organization-wide usage.
 
 ## Output
 
 Returns usage data with:
 - ` + "`minutes_used`" + `: Total billable minutes used in the current billing cycle
-- ` + "`minutes_used_breakdown`" + `: Map of minutes by runner OS (e.g., "UBUNTU": 120, "WINDOWS": 60, "MACOS": 30)
-- ` + "`included_minutes`" + `: Number of free minutes included in the plan
-- ` + "`total_paid_minutes_used`" + `: Total paid minutes (beyond included minutes)
+- ` + "`minutes_used_breakdown`" + `: Map of minutes by runner SKU (e.g., "Actions Linux": 120, "Actions Windows": 60, "Actions macOS": 30)
+- ` + "`included_minutes`" + `: Not provided by enhanced billing API (always 0)
+- ` + "`total_paid_minutes_used`" + `: Estimated paid minutes based on cost data
 
-**Note**: Breakdown is by OS (runner type), not by individual workflow or repository.
+**Note**: Breakdown is by runner SKU (OS and type), not by individual workflow.
 
 ## Use Cases
 
-- Check Actions usage for billing or quota from SuperPlane workflows
-- Report on workflow run minutes for cost or compliance
-- Alert when usage approaches limits (by comparing to a threshold in a later node)
-- Monitor paid usage to control costs
+- **Billing Monitoring**: Track GitHub Actions usage for billing purposes
+- **Quota Management**: Monitor usage to avoid exceeding billing quotas
+- **Cost Control**: Alert when usage approaches limits or budget thresholds
+- **Usage Reporting**: Generate monthly or periodic usage reports for compliance
+- **Repository Analysis**: Analyze runner usage patterns by repository
+- **Resource Planning**: Analyze runner usage patterns by OS type
 
 ## References
 
 - [GitHub Billing Usage API](https://docs.github.com/rest/billing/usage)
-- [Permissions required for GitHub Apps - Administration](https://docs.github.com/en/rest/overview/permissions-required-for-github-apps#organization-permissions-for-administration)
+- [Permissions required for GitHub Apps - Organization Administration](https://docs.github.com/en/rest/overview/permissions-required-for-github-apps#organization-permissions-for-administration)
 - [Viewing your usage of metered products](https://docs.github.com/en/billing/managing-billing-for-github-actions/viewing-your-github-actions-usage)`
 }
 
@@ -102,11 +104,53 @@ func (g *GetWorkflowUsage) OutputChannels(configuration any) []core.OutputChanne
 }
 
 func (g *GetWorkflowUsage) Configuration() []configuration.Field {
-	return []configuration.Field{}
+	return []configuration.Field{
+		{
+			Name:        "repositories",
+			Label:       "Repositories",
+			Type:        configuration.FieldTypeIntegrationResource,
+			Required:    false,
+			Description: "Select specific repositories to check usage for. Leave empty for organization-wide usage.",
+			TypeOptions: &configuration.TypeOptions{
+				Resource: &configuration.ResourceTypeOptions{
+					Type:           "repository",
+					UseNameAsValue: true,
+					Multi:          true,
+				},
+			},
+		},
+	}
 }
 
 func (g *GetWorkflowUsage) Setup(ctx core.SetupContext) error {
-	// No configuration or validation required - component retrieves org-level billing data
+	var config GetWorkflowUsageConfiguration
+	if err := mapstructure.Decode(ctx.Configuration, &config); err != nil {
+		return fmt.Errorf("failed to decode configuration: %w", err)
+	}
+
+	// If repositories are specified, validate they exist in metadata
+	if len(config.Repositories) > 0 {
+		// Validate each repository
+		var appMetadata Metadata
+		if err := mapstructure.Decode(ctx.Integration.GetMetadata(), &appMetadata); err != nil {
+			return fmt.Errorf("failed to decode application metadata: %w", err)
+		}
+
+		// Check each repository exists
+		for _, repo := range config.Repositories {
+			found := false
+			for _, availableRepo := range appMetadata.Repositories {
+				if availableRepo.Name == repo {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("repository %s is not accessible to app installation", repo)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -126,21 +170,63 @@ func (g *GetWorkflowUsage) Execute(ctx core.ExecutionContext) error {
 		return fmt.Errorf("failed to initialize GitHub client: %w", err)
 	}
 
-	// Get organization-wide billing information
-	// Note: This API returns the current billing cycle data
-	billing, _, err := client.Billing.GetActionsBillingOrg(
+	// Use the enhanced billing API for more detailed usage data
+	// This API returns itemized usage with repository-level breakdown
+	usageReport, _, err := client.Billing.GetUsageReportOrg(
 		context.Background(),
 		appMetadata.Owner,
+		nil, // No time filtering - returns current billing cycle
 	)
 	if err != nil {
 		return fmt.Errorf("failed to get billing usage: %w", err)
 	}
 
+	// Aggregate usage data, optionally filtering by repository
 	result := WorkflowUsageResult{
-		MinutesUsed:          billing.TotalMinutesUsed,
-		MinutesUsedBreakdown: billing.MinutesUsedBreakdown,
-		IncludedMinutes:      billing.IncludedMinutes,
-		TotalPaidMinutesUsed: billing.TotalPaidMinutesUsed,
+		MinutesUsed:          0,
+		MinutesUsedBreakdown: make(gh.MinutesUsedBreakdown),
+		IncludedMinutes:      0, // Enhanced billing API doesn't include this field
+		TotalPaidMinutesUsed: 0,
+	}
+
+	// Process usage items
+	for _, item := range usageReport.UsageItems {
+		// Filter by repositories if specified
+		if len(config.Repositories) > 0 {
+			found := false
+			repoName := item.GetRepositoryName()
+			for _, repo := range config.Repositories {
+				if repoName == repo {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// Only process Actions usage (skip other products like Copilot, Packages, etc.)
+		if item.GetProduct() != "Actions" {
+			continue
+		}
+
+		// Aggregate total minutes (quantity represents minutes for Actions)
+		if item.Quantity != nil {
+			result.MinutesUsed += *item.Quantity
+		}
+
+		// Aggregate by SKU (runner OS type)
+		sku := item.GetSKU()
+		if sku != "" && item.Quantity != nil {
+			result.MinutesUsedBreakdown[sku] = result.MinutesUsedBreakdown[sku] + int(*item.Quantity)
+		}
+
+		// Calculate paid minutes from net amount
+		// Note: Enhanced billing API provides cost, not included minutes
+		if item.NetAmount != nil {
+			result.TotalPaidMinutesUsed += *item.NetAmount / 0.008 // Approximate minutes from cost (assuming $0.008/min average)
+		}
 	}
 
 	return ctx.ExecutionState.Emit(
