@@ -1,0 +1,344 @@
+package rootly
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"github.com/mitchellh/mapstructure"
+	"github.com/superplanehq/superplane/pkg/configuration"
+	"github.com/superplanehq/superplane/pkg/core"
+)
+
+type OnEvent struct{}
+
+type OnEventConfiguration struct {
+	IncidentStatus *string `json:"incidentStatus,omitempty"`
+	Severity       *string `json:"severity,omitempty"`
+	Service        *string `json:"service,omitempty"`
+	Team           *string `json:"team,omitempty"`
+	EventSource    *string `json:"eventSource,omitempty"`
+	Visibility     *string `json:"visibility,omitempty"`
+	EventKind      *string `json:"eventKind,omitempty"`
+}
+
+func (t *OnEvent) Name() string {
+	return "rootly.onEvent"
+}
+
+func (t *OnEvent) Label() string {
+	return "On Event"
+}
+
+func (t *OnEvent) Description() string {
+	return "Listen to incident timeline events"
+}
+
+func (t *OnEvent) Documentation() string {
+	return `The On Event trigger starts a workflow execution when Rootly incident timeline events occur.
+
+## Use Cases
+
+- **Timeline automation**: Automate responses when incident notes or events are added
+- **Event monitoring**: Monitor specific types of events or notes in incident timelines
+- **Notification workflows**: Send notifications when important timeline events happen
+- **Integration workflows**: Sync incident timeline events with external systems
+
+## Configuration
+
+- **Incident Status**: Filter by incident status (e.g., started, mitigated, resolved)
+- **Severity**: Filter by incident severity (e.g., sev1, sev2)
+- **Service**: Filter by service name
+- **Team**: Filter by team name
+- **Event Source**: Filter by event source
+- **Visibility**: Filter by event visibility (internal/external)
+- **Event Kind**: Filter by event kind (e.g., note)
+
+## Event Data
+
+Each incident event includes:
+- **id**: Event ID
+- **event**: Event text content
+- **kind**: Event type (note, status change, etc.)
+- **visibility**: Event visibility (internal/external)
+- **occurred_at**: When the event occurred
+- **created_at**: When the event was created
+- **user_display_name**: User who created the event
+- **event_source**: Source of the event
+- **incident**: Complete incident information including title, status, severity, services, teams
+
+## Webhook Setup
+
+This trigger automatically sets up a Rootly webhook endpoint when configured. The endpoint is managed by SuperPlane and will be cleaned up when the trigger is removed.`
+}
+
+func (t *OnEvent) Icon() string {
+	return "file-text"
+}
+
+func (t *OnEvent) Color() string {
+	return "gray"
+}
+
+func (t *OnEvent) Configuration() []configuration.Field {
+	return []configuration.Field{
+		{
+			Name:     "incidentStatus",
+			Label:    "Incident Status",
+			Type:     configuration.FieldTypeString,
+			Required: false,
+		},
+		{
+			Name:     "severity",
+			Label:    "Severity",
+			Type:     configuration.FieldTypeString,
+			Required: false,
+		},
+		{
+			Name:     "service",
+			Label:    "Service",
+			Type:     configuration.FieldTypeString,
+			Required: false,
+		},
+		{
+			Name:     "team",
+			Label:    "Team",
+			Type:     configuration.FieldTypeString,
+			Required: false,
+		},
+		{
+			Name:     "eventSource",
+			Label:    "Event Source",
+			Type:     configuration.FieldTypeString,
+			Required: false,
+		},
+		{
+			Name:     "visibility",
+			Label:    "Visibility",
+			Type:     configuration.FieldTypeSelect,
+			Required: false,
+			TypeOptions: &configuration.TypeOptions{
+				Select: &configuration.SelectTypeOptions{
+					Options: []configuration.FieldOption{
+						{Label: "Internal", Value: "internal"},
+						{Label: "External", Value: "external"},
+					},
+				},
+			},
+		},
+		{
+			Name:     "eventKind",
+			Label:    "Event Kind",
+			Type:     configuration.FieldTypeString,
+			Required: false,
+		},
+	}
+}
+
+func (t *OnEvent) Setup(ctx core.TriggerContext) error {
+	config := OnEventConfiguration{}
+	err := mapstructure.Decode(ctx.Configuration, &config)
+	if err != nil {
+		return fmt.Errorf("failed to decode configuration: %w", err)
+	}
+
+	return ctx.Integration.RequestWebhook(WebhookConfiguration{
+		Events: []string{"incident_event.created", "incident_event.updated"},
+	})
+}
+
+func (t *OnEvent) Actions() []core.Action {
+	return []core.Action{}
+}
+
+func (t *OnEvent) HandleAction(ctx core.TriggerActionContext) (map[string]any, error) {
+	return nil, nil
+}
+
+func (t *OnEvent) HandleWebhook(ctx core.WebhookRequestContext) (int, error) {
+	config := OnEventConfiguration{}
+	err := mapstructure.Decode(ctx.Configuration, &config)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to decode configuration: %w", err)
+	}
+
+	// Verify signature
+	signature := ctx.Headers.Get("X-Rootly-Signature")
+	secret, err := ctx.Webhook.GetSecret()
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("error getting secret: %v", err)
+	}
+
+	if err := verifyWebhookSignature(signature, ctx.Body, secret); err != nil {
+		return http.StatusForbidden, fmt.Errorf("invalid signature: %v", err)
+	}
+
+	// Parse webhook payload
+	var webhook WebhookPayload
+	err = json.Unmarshal(ctx.Body, &webhook)
+	if err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing request body: %v", err)
+	}
+
+	eventType := webhook.Event.Type
+
+	// Only handle incident event types
+	if eventType != "incident_event.created" && eventType != "incident_event.updated" {
+		return http.StatusOK, nil
+	}
+
+	// Apply filters
+	if !matchesFilters(webhook.Data, config) {
+		return http.StatusOK, nil
+	}
+
+	err = ctx.Events.Emit(
+		fmt.Sprintf("rootly.%s", eventType),
+		buildEventPayload(webhook),
+	)
+
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("error emitting event: %v", err)
+	}
+
+	return http.StatusOK, nil
+}
+
+func matchesFilters(data map[string]any, config OnEventConfiguration) bool {
+	// Filter by visibility
+	if config.Visibility != nil {
+		visibility, _ := data["visibility"].(string)
+		if visibility != *config.Visibility {
+			return false
+		}
+	}
+
+	// Filter by event kind
+	if config.EventKind != nil {
+		kind, _ := data["kind"].(string)
+		if kind != *config.EventKind {
+			return false
+		}
+	}
+
+	// Filter by event source
+	if config.EventSource != nil {
+		eventSource, _ := data["event_source"].(string)
+		if eventSource != *config.EventSource {
+			return false
+		}
+	}
+
+	// Check incident filters
+	incident, ok := data["incident"].(map[string]any)
+	if !ok {
+		return true // No incident data to filter on
+	}
+
+	// Filter by incident status
+	if config.IncidentStatus != nil {
+		status, _ := incident["status"].(string)
+		if status != *config.IncidentStatus {
+			return false
+		}
+	}
+
+	// Filter by severity
+	if config.Severity != nil {
+		severity := severityString(incident["severity"])
+		if severity != *config.Severity {
+			return false
+		}
+	}
+
+	// Filter by service
+	if config.Service != nil {
+		services, ok := incident["services"].([]any)
+		if !ok {
+			return false
+		}
+		found := false
+		for _, svc := range services {
+			svcMap, ok := svc.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := svcMap["name"].(string)
+			slug, _ := svcMap["slug"].(string)
+			if name == *config.Service || slug == *config.Service {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	// Filter by team (groups)
+	if config.Team != nil {
+		groups, ok := incident["groups"].([]any)
+		if !ok {
+			return false
+		}
+		found := false
+		for _, grp := range groups {
+			grpMap, ok := grp.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := grpMap["name"].(string)
+			slug, _ := grpMap["slug"].(string)
+			if name == *config.Team || slug == *config.Team {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+func buildEventPayload(webhook WebhookPayload) map[string]any {
+	payload := map[string]any{}
+
+	// Copy relevant fields from webhook.Data
+	if webhook.Data != nil {
+		if id, ok := webhook.Data["id"]; ok {
+			payload["id"] = id
+		}
+		if event, ok := webhook.Data["event"]; ok {
+			payload["event"] = event
+		}
+		if kind, ok := webhook.Data["kind"]; ok {
+			payload["kind"] = kind
+		}
+		if visibility, ok := webhook.Data["visibility"]; ok {
+			payload["visibility"] = visibility
+		}
+		if occurredAt, ok := webhook.Data["occurred_at"]; ok {
+			payload["occurred_at"] = occurredAt
+		}
+		if createdAt, ok := webhook.Data["created_at"]; ok {
+			payload["created_at"] = createdAt
+		}
+		if userDisplayName, ok := webhook.Data["user_display_name"]; ok {
+			payload["user_display_name"] = userDisplayName
+		}
+		if eventSource, ok := webhook.Data["event_source"]; ok {
+			payload["event_source"] = eventSource
+		}
+		if incident, ok := webhook.Data["incident"]; ok {
+			payload["incident"] = incident
+		}
+	}
+
+	return payload
+}
+
+func (t *OnEvent) Cleanup(ctx core.TriggerContext) error {
+	return nil
+}
