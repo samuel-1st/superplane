@@ -1,0 +1,9 @@
+{
+  "data": {
+    "message_id": 42,
+    "text": "Hello from SuperPlane",
+    "date": 1737028800
+  },
+  "timestamp": "2026-01-16T17:56:16.680755501Z",
+  "type": "telegram.message.sent"
+}
