@@ -145,7 +145,13 @@ func (a *AWS) Components() []core.Component {
 		&ecs.DescribeService{},
 		&ecs.RunTask{},
 		&ecs.StopTask{},
+		&ec2.CopyImage{},
 		&ec2.CreateImage{},
+		&ec2.DeregisterImage{},
+		&ec2.DisableImage{},
+		&ec2.DisableImageDeprecation{},
+		&ec2.EnableImage{},
+		&ec2.EnableImageDeprecation{},
 		&ec2.GetImage{},
 		&sns.GetTopic{},
 		&sns.GetSubscription{},
@@ -716,6 +722,10 @@ func (a *AWS) subscriptionApplies(subscription core.IntegrationSubscriptionConte
 		return false
 	}
 
+	if configuration.Region != event.Region {
+		return false
+	}
+
 	if configuration.DetailType != event.DetailType {
 		return false
 	}
@@ -851,10 +861,12 @@ func (a *AWS) provisionDestination(credentials *aws.Credentials, logger *logrus.
 }
 
 func (a *AWS) provisionRule(credentials *aws.Credentials, logger *logrus.Entry, integration core.IntegrationContext, http core.HTTPContext, metadata *common.IntegrationMetadata, destination *common.APIDestinationMetadata, source string, detailType string) error {
+	ruleKey := common.EventBridgeRuleKey(source, destination.Region)
+
 	//
 	// If the rule does not exist yet, we create it.
 	//
-	rule, ok := metadata.EventBridge.Rules[source]
+	rule, ok := metadata.EventBridge.Rules[ruleKey]
 	if !ok {
 		return a.createRule(credentials, logger, integration, http, metadata, destination, source, []string{detailType})
 	}
@@ -889,7 +901,8 @@ func (a *AWS) updateRule(credentials *aws.Credentials, logger *logrus.Entry, htt
 		return fmt.Errorf("error updating EventBridge rule %s: %v", rule.RuleArn, err)
 	}
 
-	metadata.EventBridge.Rules[rule.Source] = common.EventBridgeRuleMetadata{
+	ruleKey := common.EventBridgeRuleKey(rule.Source, rule.Region)
+	metadata.EventBridge.Rules[ruleKey] = common.EventBridgeRuleMetadata{
 		Name:        rule.Name,
 		Source:      rule.Source,
 		Region:      rule.Region,
@@ -948,7 +961,8 @@ func (a *AWS) createRule(
 		metadata.EventBridge.Rules = make(map[string]common.EventBridgeRuleMetadata)
 	}
 
-	metadata.EventBridge.Rules[source] = common.EventBridgeRuleMetadata{
+	ruleKey := common.EventBridgeRuleKey(source, destination.Region)
+	metadata.EventBridge.Rules[ruleKey] = common.EventBridgeRuleMetadata{
 		Name:        ruleName,
 		Source:      source,
 		Region:      destination.Region,
