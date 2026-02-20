@@ -225,7 +225,41 @@ func (t *Telegram) HandleRequest(ctx core.HTTPRequestContext) {
 			continue
 		}
 
-		err = subscription.SendMessage(update.Message)
+		// Convert message to map for serialization
+		messageMap := map[string]any{
+			"message_id": update.Message.MessageID,
+			"text":       update.Message.Text,
+			"date":       update.Message.Date,
+		}
+
+		if update.Message.From != nil {
+			messageMap["from"] = map[string]any{
+				"id":         update.Message.From.ID,
+				"is_bot":     update.Message.From.IsBot,
+				"first_name": update.Message.From.FirstName,
+				"username":   update.Message.From.Username,
+			}
+		}
+
+		messageMap["chat"] = map[string]any{
+			"id":    update.Message.Chat.ID,
+			"type":  update.Message.Chat.Type,
+			"title": update.Message.Chat.Title,
+		}
+
+		if len(update.Message.Entities) > 0 {
+			entities := make([]map[string]any, len(update.Message.Entities))
+			for i, entity := range update.Message.Entities {
+				entities[i] = map[string]any{
+					"type":   entity.Type,
+					"offset": entity.Offset,
+					"length": entity.Length,
+				}
+			}
+			messageMap["entities"] = entities
+		}
+
+		err = subscription.SendMessage(messageMap)
 		if err != nil {
 			ctx.Logger.Errorf("error sending message from integration: %v", err)
 		}

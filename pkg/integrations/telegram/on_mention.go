@@ -152,15 +152,30 @@ func (t *OnMention) OnIntegrationMessage(ctx core.IntegrationMessageContext) err
 		return fmt.Errorf("failed to decode configuration: %w", err)
 	}
 
-	// Get message from context
-	message, ok := ctx.Message.(*TelegramMessage)
+	// Get message from context as map
+	message, ok := ctx.Message.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid message type")
 	}
 
 	// If chat ID configuration is set and does not match the message chat, ignore
 	if config.ChatID != "" {
-		messageChatID := fmt.Sprintf("%d", message.Chat.ID)
+		chatData, ok := message["chat"].(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid chat data in message")
+		}
+
+		var chatID int64
+		switch v := chatData["id"].(type) {
+		case int64:
+			chatID = v
+		case float64:
+			chatID = int64(v)
+		default:
+			return fmt.Errorf("invalid chat ID type")
+		}
+
+		messageChatID := fmt.Sprintf("%d", chatID)
 		if config.ChatID != messageChatID {
 			ctx.Logger.Infof("message chat %s does not match configuration chat %s, ignoring", messageChatID, config.ChatID)
 			return nil

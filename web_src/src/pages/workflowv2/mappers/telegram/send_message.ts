@@ -106,6 +106,10 @@ function sendMessageEventSections(
   execution: ExecutionInfo,
   componentName: string,
 ): EventSection[] {
+  if (!execution.rootEvent) {
+    return [];
+  }
+
   const rootTriggerNode = nodes.find((n) => n.id === execution.rootEvent?.nodeId);
   const rootTriggerRenderer = getTriggerRenderer(rootTriggerNode?.componentName!);
   const { title } = rootTriggerRenderer.getTitleAndSubtitle({ event: execution.rootEvent });
@@ -115,7 +119,7 @@ function sendMessageEventSections(
       receivedAt: new Date(execution.createdAt!),
       eventTitle: title,
       eventState: getState(componentName)(execution),
-      eventId: execution.rootEvent?.id || "",
+      eventId: execution.rootEvent.id || "",
     },
   ];
 }
