@@ -51,15 +51,9 @@ func (t *Telegram) Description() string {
 }
 
 func (t *Telegram) Instructions() string {
-	return `To set up Telegram integration:
-
-1. Open Telegram and search for **@BotFather**
-2. Send **/newbot** and follow the prompts to create a new bot
-3. BotFather will provide a **Bot Token** (e.g. ` + "`" + `123456:ABC-DEF...` + "`" + `)
-4. To find your **Chat ID**, send a message to your bot and call:
-   ` + "`" + `https://api.telegram.org/bot<token>/getUpdates` + "`" + `
-   The ` + "`" + `chat.id` + "`" + ` field in the response is your Chat ID
-5. Paste the **Bot Token** in the **Bot Token** field below`
+	return `
+Create a bot via **@BotFather** on Telegram and paste the **Bot Token** below.
+`
 }
 
 func (t *Telegram) Configuration() []configuration.Field {
@@ -198,4 +192,3 @@ func (t *Telegram) Actions() []core.Action {
 func (t *Telegram) HandleAction(ctx core.IntegrationActionContext) error {
 	return nil
 }
-
