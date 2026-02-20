@@ -1,0 +1,132 @@
+---
+title: "Telegram"
+---
+
+Send messages and react to mentions via Telegram Bot API
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+## Triggers
+
+<CardGrid>
+  <LinkCard title="On Message Received" href="#on-message-received" description="Fires when the bot receives a message or is mentioned" />
+</CardGrid>
+
+## Actions
+
+<CardGrid>
+  <LinkCard title="Send Text Message" href="#send-text-message" description="Send a text message to a Telegram chat" />
+</CardGrid>
+
+## Instructions
+
+To set up Telegram integration:
+
+1. Open Telegram and search for **@BotFather**
+2. Send **/newbot** and follow the prompts to create a new bot
+3. BotFather will provide a **Bot Token** (e.g. `123456:ABC-DEF...`)
+4. To find your **Chat ID**, send a message to your bot and call:
+   `https://api.telegram.org/bot<token>/getUpdates`
+   The `chat.id` field in the response is your Chat ID
+5. Paste the **Bot Token** in the **Bot Token** field below
+
+<a id="on-message-received"></a>
+
+## On Message Received
+
+The On Message Received trigger fires when the Telegram bot receives a message.
+
+### Use Cases
+
+- **Bot commands**: React to commands sent to the bot
+- **Mentions**: Start a workflow when the bot is mentioned in a group
+- **Direct messages**: Process messages sent directly to the bot
+
+### Event Data
+
+Each event includes the full Telegram message object:
+- **message_id**: Unique message identifier
+- **from**: Sender information (id, first_name, username)
+- **chat**: Chat information (id, type, title)
+- **text**: Message text
+- **date**: Unix timestamp of the message
+- **entities**: Special entities in the message (mentions, commands, etc.)
+
+### Notes
+
+- Requires the Telegram integration to be configured with a valid bot token
+- SuperPlane automatically registers a webhook with Telegram on integration setup
+
+### Example Data
+
+```json
+{
+  "data": {
+    "chat": {
+      "id": -1001234567890,
+      "title": "My Team",
+      "type": "group"
+    },
+    "date": 1737028800,
+    "entities": [
+      {
+        "length": 6,
+        "offset": 0,
+        "type": "mention"
+      }
+    ],
+    "from": {
+      "first_name": "John",
+      "id": 111222333,
+      "is_bot": false,
+      "username": "john"
+    },
+    "message_id": 42,
+    "text": "@mybot deploy to production"
+  },
+  "timestamp": "2026-01-16T17:56:16.680755501Z",
+  "type": "telegram.message.received"
+}
+```
+
+<a id="send-text-message"></a>
+
+## Send Text Message
+
+The Send Text Message component sends a message to a Telegram chat using the Telegram Bot API.
+
+### Use Cases
+
+- **Notifications**: Send notifications about workflow events or system status
+- **Alerts**: Alert teams about important events or errors
+- **Updates**: Provide status updates on long-running processes
+
+### Configuration
+
+- **Chat ID**: The Telegram chat ID to send the message to (e.g. `-1001234567890` for a group)
+- **Text**: The message text to send
+- **Parse Mode**: Optional formatting mode. Select `MarkdownV2` to enable Telegram's MarkdownV2 formatting
+
+### Output
+
+Returns metadata about the sent message including message ID and text.
+
+### Notes
+
+- The Telegram bot must be a member of the target chat and have permission to send messages
+- When using MarkdownV2 formatting, reserved characters in the text are automatically escaped
+
+### Example Output
+
+```json
+{
+  "data": {
+    "date": 1737028800,
+    "message_id": 42,
+    "text": "Hello from SuperPlane"
+  },
+  "timestamp": "2026-01-16T17:56:16.680755501Z",
+  "type": "telegram.message.sent"
+}
+```
+

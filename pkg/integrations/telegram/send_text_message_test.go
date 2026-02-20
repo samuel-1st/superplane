@@ -48,7 +48,7 @@ func Test__SendTextMessage__Setup(t *testing.T) {
 		require.ErrorContains(t, err, "failed to decode configuration")
 	})
 
-	t.Run("missing chatId -> error", func(t *testing.T) {
+	t.Run("missing chatId with no integration default -> error", func(t *testing.T) {
 		err := component.Setup(core.SetupContext{
 			Integration:   &contexts.IntegrationContext{},
 			Metadata:      &contexts.MetadataContext{},
@@ -76,6 +76,18 @@ func Test__SendTextMessage__Setup(t *testing.T) {
 		})
 
 		require.ErrorContains(t, err, "invalid parseMode")
+	})
+
+	t.Run("chatId from integration default -> ok", func(t *testing.T) {
+		err := component.Setup(core.SetupContext{
+			Integration: &contexts.IntegrationContext{
+				Configuration: map[string]any{"defaultChatId": "999888"},
+			},
+			Metadata:      &contexts.MetadataContext{},
+			Configuration: map[string]any{"text": "Hello"},
+		})
+
+		require.NoError(t, err)
 	})
 
 	t.Run("valid config with no parseMode -> ok", func(t *testing.T) {
@@ -205,7 +217,7 @@ func Test__SendTextMessage__Execute(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to send message")
 	})
 
-	t.Run("missing chatId -> error", func(t *testing.T) {
+	t.Run("missing chatId with no default -> error", func(t *testing.T) {
 		execState := &contexts.ExecutionStateContext{KVs: map[string]string{}}
 		integrationCtx := &contexts.IntegrationContext{
 			Configuration: map[string]any{"botToken": "test-bot-token"},

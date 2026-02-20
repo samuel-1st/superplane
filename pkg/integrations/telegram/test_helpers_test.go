@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"testing"
+
+	"github.com/sirupsen/logrus"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -28,4 +30,19 @@ func jsonResponse(status int, body string) *http.Response {
 		Body:       io.NopCloser(bytes.NewBufferString(body)),
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 	}
+}
+
+func newTestLogger() *logrus.Entry {
+	return logrus.NewEntry(logrus.New())
+}
+
+type mockSubscription struct {
+	config   any
+	messages []any
+}
+
+func (m *mockSubscription) Configuration() any   { return m.config }
+func (m *mockSubscription) SendMessage(msg any) error {
+	m.messages = append(m.messages, msg)
+	return nil
 }

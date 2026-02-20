@@ -1,0 +1,23 @@
+{
+  "type": "telegram.message.received",
+  "data": {
+    "message_id": 42,
+    "from": {
+      "id": 111222333,
+      "is_bot": false,
+      "first_name": "John",
+      "username": "john"
+    },
+    "chat": {
+      "id": -1001234567890,
+      "type": "group",
+      "title": "My Team"
+    },
+    "text": "@mybot deploy to production",
+    "date": 1737028800,
+    "entities": [
+      {"type": "mention", "offset": 0, "length": 6}
+    ]
+  },
+  "timestamp": "2026-01-16T17:56:16.680755501Z"
+}

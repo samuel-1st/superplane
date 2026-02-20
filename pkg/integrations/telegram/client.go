@@ -66,6 +66,55 @@ type sendMessageResponse struct {
 	Result Message `json:"result"`
 }
 
+// TelegramUpdate represents an incoming Telegram update
+type TelegramUpdate struct {
+	UpdateID int              `json:"update_id"`
+	Message  *TelegramMessage `json:"message,omitempty"`
+}
+
+// TelegramMessage represents a Telegram message
+type TelegramMessage struct {
+	MessageID int            `json:"message_id"`
+	From      *TelegramUser  `json:"from,omitempty"`
+	Chat      TelegramChat   `json:"chat"`
+	Text      string         `json:"text,omitempty"`
+	Date      int64          `json:"date"`
+	Entities  []MessageEntity `json:"entities,omitempty"`
+}
+
+// TelegramUser represents a Telegram user or bot
+type TelegramUser struct {
+	ID        int    `json:"id"`
+	IsBot     bool   `json:"is_bot"`
+	FirstName string `json:"first_name"`
+	Username  string `json:"username,omitempty"`
+}
+
+// TelegramChat represents a Telegram chat
+type TelegramChat struct {
+	ID    int64  `json:"id"`
+	Type  string `json:"type"`
+	Title string `json:"title,omitempty"`
+}
+
+// MessageEntity represents a special entity in a message (e.g. mention, command)
+type MessageEntity struct {
+	Type   string `json:"type"`
+	Offset int    `json:"offset"`
+	Length int    `json:"length"`
+}
+
+// setWebhookRequest is the request body for setWebhook
+type setWebhookRequest struct {
+	URL string `json:"url"`
+}
+
+// setWebhookResponse is the API response from setWebhook
+type setWebhookResponse struct {
+	OK          bool   `json:"ok"`
+	Description string `json:"description,omitempty"`
+}
+
 // GetMe validates the bot token by calling the getMe endpoint
 func (c *Client) GetMe() (*BotUser, error) {
 	responseBody, err := c.doRequest(http.MethodGet, "getMe", nil)
@@ -107,6 +156,30 @@ func (c *Client) SendMessage(req SendMessageRequest) (*Message, error) {
 	}
 
 	return &resp.Result, nil
+}
+
+// SetWebhook registers the webhook URL with Telegram
+func (c *Client) SetWebhook(webhookURL string) error {
+	body, err := json.Marshal(setWebhookRequest{URL: webhookURL})
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	responseBody, err := c.doRequest(http.MethodPost, "setWebhook", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	var resp setWebhookResponse
+	if err := json.Unmarshal(responseBody, &resp); err != nil {
+		return fmt.Errorf("failed to parse setWebhook response: %w", err)
+	}
+
+	if !resp.OK {
+		return fmt.Errorf("setWebhook returned ok=false: %s", resp.Description)
+	}
+
+	return nil
 }
 
 // doRequest executes an HTTP request to the Telegram Bot API

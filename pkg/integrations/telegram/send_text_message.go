@@ -83,8 +83,8 @@ func (c *SendTextMessage) Configuration() []configuration.Field {
 			Name:        "chatId",
 			Label:       "Chat ID",
 			Type:        configuration.FieldTypeString,
-			Required:    true,
-			Description: "Telegram chat ID to send the message to",
+			Required:    false,
+			Description: "Telegram chat ID to send the message to (uses the integration default if not set)",
 		},
 		{
 			Name:        "text",
@@ -118,8 +118,8 @@ func (c *SendTextMessage) Setup(ctx core.SetupContext) error {
 		return fmt.Errorf("failed to decode configuration: %w", err)
 	}
 
-	if config.ChatID == "" {
-		return errors.New("chatId is required")
+	if err := resolveChatID(&config.ChatID, ctx.Integration); err != nil {
+		return err
 	}
 
 	if config.Text == "" {
@@ -143,8 +143,8 @@ func (c *SendTextMessage) Execute(ctx core.ExecutionContext) error {
 		return fmt.Errorf("failed to decode configuration: %w", err)
 	}
 
-	if config.ChatID == "" {
-		return errors.New("chatId is required")
+	if err := resolveChatID(&config.ChatID, ctx.Integration); err != nil {
+		return err
 	}
 
 	if config.Text == "" {
@@ -210,4 +210,20 @@ func EscapeMarkdownV2(text string) string {
 		text = strings.ReplaceAll(text, char, `\`+char)
 	}
 	return text
+}
+
+// resolveChatID fills chatID from the integration's defaultChatId when the
+// component-level chatId is empty. Returns an error if neither is set.
+func resolveChatID(chatID *string, integration core.IntegrationContext) error {
+	if *chatID != "" {
+		return nil
+	}
+
+	defaultChatID, err := integration.GetConfig("defaultChatId")
+	if err == nil && len(defaultChatID) > 0 {
+		*chatID = string(defaultChatID)
+		return nil
+	}
+
+	return errors.New("chatId is required (set it on the component or configure a default on the integration)")
 }
