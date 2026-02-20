@@ -165,6 +165,7 @@ func (t *OnMention) OnIntegrationMessage(ctx core.IntegrationMessageContext) err
 			return fmt.Errorf("invalid chat data in message")
 		}
 
+		// Handle both int64 and float64 types since JSON unmarshaling may represent numbers as float64
 		var chatID int64
 		switch v := chatData["id"].(type) {
 		case int64:
