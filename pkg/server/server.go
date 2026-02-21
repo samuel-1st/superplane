@@ -44,6 +44,7 @@ import (
 	_ "github.com/superplanehq/superplane/pkg/integrations/digitalocean"
 	_ "github.com/superplanehq/superplane/pkg/integrations/discord"
 	_ "github.com/superplanehq/superplane/pkg/integrations/dockerhub"
+	_ "github.com/superplanehq/superplane/pkg/integrations/gcp"
 	_ "github.com/superplanehq/superplane/pkg/integrations/github"
 	_ "github.com/superplanehq/superplane/pkg/integrations/gitlab"
 	_ "github.com/superplanehq/superplane/pkg/integrations/grafana"
@@ -61,6 +62,7 @@ import (
 	_ "github.com/superplanehq/superplane/pkg/integrations/slack"
 	_ "github.com/superplanehq/superplane/pkg/integrations/smtp"
 	_ "github.com/superplanehq/superplane/pkg/integrations/statuspage"
+	_ "github.com/superplanehq/superplane/pkg/integrations/telegram"
 	_ "github.com/superplanehq/superplane/pkg/triggers/schedule"
 	_ "github.com/superplanehq/superplane/pkg/triggers/start"
 	_ "github.com/superplanehq/superplane/pkg/triggers/webhook"
@@ -116,9 +118,12 @@ func startWorkers(encryptor crypto.Encryptor, registry *registry.Registry, oidcP
 		go w.Start(context.Background())
 	}
 
-	if os.Getenv("START_WEBHOOK_PROVISIONER") == "yes" {
-		log.Println("Starting Webhook Provisioner")
-
+	// Start Webhook Provisioner when internal API runs so integration webhooks (e.g. GCP On VM Created) get provisioned.
+	// Can be disabled by setting START_WEBHOOK_PROVISIONER=no.
+	if os.Getenv("START_WEBHOOK_PROVISIONER") != "no" {
+		if os.Getenv("START_WEBHOOK_PROVISIONER") == "yes" {
+			log.Println("Starting Webhook Provisioner")
+		}
 		webhookBaseURL := getWebhookBaseURL(baseURL)
 		w := workers.NewWebhookProvisioner(webhookBaseURL, encryptor, registry)
 		go w.Start(context.Background())
@@ -394,11 +399,11 @@ func getWebhookBaseURL(baseURL string) string {
 }
 
 /*
- * 512KB is the default maximum response size for HTTP responses.
+ * 8MB is the default maximum response size for HTTP responses.
  * This prevents component/trigger implementations from using too much memory,
  * and also from emitting large events.
  */
-var DefaultMaxHTTPResponseBytes int64 = 512 * 1024
+var DefaultMaxHTTPResponseBytes int64 = 8 * 1024 * 1024
 
 /*
  * Default blocked HTTP hosts include:

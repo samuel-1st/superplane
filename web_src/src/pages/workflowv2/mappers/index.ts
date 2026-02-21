@@ -99,6 +99,11 @@ import {
   eventStateRegistry as discordEventStateRegistry,
 } from "./discord";
 import {
+  componentMappers as telegramComponentMappers,
+  triggerRenderers as telegramTriggerRenderers,
+  eventStateRegistry as telegramEventStateRegistry,
+} from "./telegram";
+import {
   componentMappers as openaiComponentMappers,
   triggerRenderers as openaiTriggerRenderers,
   eventStateRegistry as openaiEventStateRegistry,
@@ -146,6 +151,12 @@ import {
   triggerRenderers as dockerhubTriggerRenderers,
   eventStateRegistry as dockerhubEventStateRegistry,
 } from "./dockerhub";
+import {
+  componentMappers as gcpComponentMappers,
+  customFieldRenderers as gcpCustomFieldRenderers,
+  triggerRenderers as gcpTriggerRenderers,
+  eventStateRegistry as gcpEventStateRegistry,
+} from "./gcp";
 import {
   componentMappers as servicenowComponentMappers,
   customFieldRenderers as servicenowCustomFieldRenderers,
@@ -202,9 +213,11 @@ const appMappers: Record<string, Record<string, ComponentBaseMapper>> = {
   rootly: rootlyComponentMappers,
   aws: awsComponentMappers,
   discord: discordComponentMappers,
+  telegram: telegramComponentMappers,
   openai: openaiComponentMappers,
   circleci: circleCIComponentMappers,
   claude: claudeComponentMappers,
+  gcp: gcpComponentMappers,
   prometheus: prometheusComponentMappers,
   cursor: cursorComponentMappers,
   hetzner: hetznerComponentMappers,
@@ -231,9 +244,11 @@ const appTriggerRenderers: Record<string, Record<string, TriggerRenderer>> = {
   rootly: rootlyTriggerRenderers,
   aws: awsTriggerRenderers,
   discord: discordTriggerRenderers,
+  telegram: telegramTriggerRenderers,
   openai: openaiTriggerRenderers,
   circleci: circleCITriggerRenderers,
   claude: claudeTriggerRenderers,
+  gcp: gcpTriggerRenderers,
   grafana: grafanaTriggerRenderers,
   bitbucket: bitbucketTriggerRenderers,
   prometheus: prometheusTriggerRenderers,
@@ -258,10 +273,12 @@ const appEventStateRegistries: Record<string, Record<string, EventStateRegistry>
   sendgrid: sendgridEventStateRegistry,
   render: renderEventStateRegistry,
   discord: discordEventStateRegistry,
+  telegram: telegramEventStateRegistry,
   rootly: rootlyEventStateRegistry,
   openai: openaiEventStateRegistry,
   circleci: circleCIEventStateRegistry,
   claude: claudeEventStateRegistry,
+  gcp: gcpEventStateRegistry,
   statuspage: statuspageEventStateRegistry,
   aws: awsEventStateRegistry,
   grafana: grafanaEventStateRegistry,
@@ -299,6 +316,7 @@ const appCustomFieldRenderers: Record<string, Record<string, CustomFieldRenderer
   grafana: grafanaCustomFieldRenderers,
   prometheus: prometheusCustomFieldRenderers,
   dockerhub: dockerhubCustomFieldRenderers,
+  gcp: gcpCustomFieldRenderers,
   servicenow: servicenowCustomFieldRenderers,
 };
 
