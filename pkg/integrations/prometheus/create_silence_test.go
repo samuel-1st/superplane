@@ -165,7 +165,7 @@ func Test__CreateSilence__Execute(t *testing.T) {
 		assert.True(t, executionCtx.Passed)
 		assert.Equal(t, "prometheus.silence", executionCtx.Type)
 		require.Len(t, executionCtx.Payloads, 1)
-		
+
 		wrappedPayload := executionCtx.Payloads[0].(map[string]any)
 		payload := wrappedPayload["data"].(map[string]any)
 		assert.Equal(t, "abc123", payload["silenceID"])
