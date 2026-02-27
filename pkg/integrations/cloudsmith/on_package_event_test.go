@@ -1,6 +1,7 @@
 package cloudsmith
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -71,6 +72,15 @@ func Test__OnPackageEvent__Setup(t *testing.T) {
 		assert.Equal(t, "my-org/my-repo", stored.Repository)
 		assert.Equal(t, "abc123", stored.WebhookSlug)
 		assert.NotEmpty(t, stored.WebhookURL)
+
+		// Verify the HTTP request used the correct "target_url" field (not "webhook_url")
+		require.Len(t, httpCtx.Requests, 1)
+		bodyBytes, err := io.ReadAll(httpCtx.Requests[0].Body)
+		require.NoError(t, err)
+		var reqBody map[string]any
+		require.NoError(t, json.Unmarshal(bodyBytes, &reqBody))
+		assert.Contains(t, reqBody, "target_url", "request body must use 'target_url' per the Cloudsmith API spec")
+		assert.NotContains(t, reqBody, "webhook_url", "request body must not use 'webhook_url'")
 	})
 
 	t.Run("already configured -> skips setup", func(t *testing.T) {
