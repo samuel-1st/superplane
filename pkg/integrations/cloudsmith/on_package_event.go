@@ -25,7 +25,10 @@ type OnPackageEventMetadata struct {
 }
 
 type PackageEventPayload struct {
-	Event string `json:"event"`
+	Meta struct {
+		EventID string `json:"event_id"`
+	} `json:"meta"`
+	Data map[string]any `json:"data"`
 }
 
 func (p *OnPackageEvent) Name() string {
@@ -179,27 +182,31 @@ func (p *OnPackageEvent) HandleWebhook(ctx core.WebhookRequestContext) (int, err
 		return http.StatusBadRequest, fmt.Errorf("error parsing request body: %w", err)
 	}
 
+	eventID := payload.Meta.EventID
+
 	if len(spec.Events) > 0 {
 		matched := false
 		for _, e := range spec.Events {
-			if e == payload.Event {
+			if e == eventID {
 				matched = true
 				break
 			}
 		}
 
 		if !matched {
-			ctx.Logger.Infof("Ignoring event type %s", payload.Event)
+			ctx.Logger.Infof("Ignoring event type %s", eventID)
 			return http.StatusOK, nil
 		}
 	}
 
-	var raw map[string]any
-	if err := json.Unmarshal(ctx.Body, &raw); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("error parsing request body: %w", err)
+	// Emit a normalized event: include event type alongside package data so the
+	// frontend mapper can display it without knowing the raw Cloudsmith envelope.
+	eventData := map[string]any{
+		"event":   eventID,
+		"package": payload.Data,
 	}
 
-	if err := ctx.Events.Emit("cloudsmith.package.event", raw); err != nil {
+	if err := ctx.Events.Emit("cloudsmith.package.event", eventData); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("error emitting event: %w", err)
 	}
 

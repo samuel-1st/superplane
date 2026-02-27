@@ -141,7 +141,7 @@ func Test__OnPackageEvent__HandleWebhook(t *testing.T) {
 	})
 
 	t.Run("event filter mismatch -> ignored", func(t *testing.T) {
-		body := []byte(`{"event":"package.deleted"}`)
+		body := []byte(`{"meta":{"event_id":"package.deleted"},"data":{}}`)
 		events := &contexts.EventContext{}
 		code, err := trigger.HandleWebhook(core.WebhookRequestContext{
 			Body:   body,
@@ -164,7 +164,7 @@ func Test__OnPackageEvent__HandleWebhook(t *testing.T) {
 	})
 
 	t.Run("matching event -> event emitted", func(t *testing.T) {
-		body := []byte(`{"event":"package.synced","data":{"package":{"name":"my-lib","version":"1.0.0"}}}`)
+		body := []byte(`{"meta":{"event_id":"package.synced"},"data":{"name":"my-lib","version":"1.0.0","namespace":"my-org","repository":"my-repo"}}`)
 		events := &contexts.EventContext{}
 		code, err := trigger.HandleWebhook(core.WebhookRequestContext{
 			Body:   body,
@@ -185,5 +185,13 @@ func Test__OnPackageEvent__HandleWebhook(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, events.Count())
 		assert.Equal(t, "cloudsmith.package.event", events.Payloads[0].Type)
+		// Verify normalized event data structure
+		data, ok := events.Payloads[0].Data.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "package.synced", data["event"])
+		pkg, ok := data["package"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "my-lib", pkg["name"])
+		assert.Equal(t, "1.0.0", pkg["version"])
 	})
 }

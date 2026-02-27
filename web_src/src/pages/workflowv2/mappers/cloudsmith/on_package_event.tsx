@@ -18,10 +18,8 @@ interface PackageEventData {
     name?: string;
     version?: string;
     format?: string;
-  };
-  repository?: {
-    name?: string;
     namespace?: string;
+    repository?: string;
   };
 }
 
@@ -44,14 +42,13 @@ export const onPackageEventTriggerRenderer: TriggerRenderer = {
   getRootEventValues: (context: TriggerEventContext): Record<string, string> => {
     const eventData = context.event?.data as PackageEventData;
     const pkg = eventData?.package;
-    const repo = eventData?.repository;
 
     return {
       Event: stringOrDash(eventData?.event),
       Package: stringOrDash(pkg?.name),
       Version: stringOrDash(pkg?.version),
       Format: stringOrDash(pkg?.format),
-      Repository: repo?.namespace ? `${repo.namespace}/${repo.name}` : stringOrDash(repo?.name),
+      Repository: pkg?.namespace ? `${pkg.namespace}/${pkg.repository}` : stringOrDash(pkg?.repository),
     };
   },
 

@@ -239,18 +239,108 @@ assert.Contains(t, reqBody, "target_url")
 assert.Contains(t, reqBody, "templates")
 ```
 
-### 8. Use Scalable SVGs — Always Include a `viewBox`
+### 9. Verify the Incoming Webhook Payload Structure Before Writing `HandleWebhook`
 
-When adding an SVG icon, it **must** have a `viewBox` attribute. Without it, browsers cannot scale the image down from its natural size, so the icon appears blank or clipped when rendered at 16×16 px.
+**Always read the provider's webhook documentation to understand the exact JSON structure** of the payload that Cloudsmith (or any provider) sends to your endpoint. Do not assume it is a flat object — many providers wrap their data in nested fields.
 
-- Cloudsmith mistake: the `cloudsmith.svg` had `width="200" height="200"` but no `viewBox`, causing the icon to be invisible in the canvas sidebar and header.
-- Fix: always use the SVG from Simple Icons CDN — it always includes `viewBox="0 0 24 24"` and no fixed dimensions:
-  ```
-  https://cdn.jsdelivr.net/npm/simple-icons/icons/<name>.svg
-  ```
-- **Do not** use SVGs that only have `width`/`height` without `viewBox`.
+**Cloudsmith webhook payload structure** (from https://help.cloudsmith.io/docs/webhooks):
+```json
+{
+  "meta": {
+    "event_id": "package.synced",
+    "event_at": "2020-07-07T17:30:34.296482+00:00",
+    "trigger_id": "c0e2b63e-...",
+    "webhook_id": 1
+  },
+  "data": {
+    "name": "my-package",
+    "version": "1.0.0",
+    "format": "raw",
+    "namespace": "my-org",
+    "repository": "my-repo",
+    "checksum_sha256": "...",
+    "cdn_url": "...",
+    "status_str": "Completed",
+    ...
+  },
+  "context": {}
+}
+```
 
-### 9. Summary of Common Integration Mistakes to Avoid
+- The event type is at **`meta.event_id`** (e.g. `"package.synced"`), NOT at a top-level `"event"` field.
+- The package data is at **`data.*`** (flat — `data.name`, `data.version`, etc.), NOT at `data.package.name`.
+
+**Cloudsmith mistake:** original `HandleWebhook` read `payload.Event` (root) — always `""` — so event filtering never worked and the event emitted to the canvas contained no useful package data.
+
+**Correct Go struct:**
+```go
+type PackageEventPayload struct {
+    Meta struct {
+        EventID string `json:"event_id"`
+    } `json:"meta"`
+    Data map[string]any `json:"data"`
+}
+```
+
+**Emit a normalized event** that combines both fields for the frontend mapper:
+```go
+eventData := map[string]any{
+    "event":   payload.Meta.EventID,
+    "package": payload.Data,
+}
+ctx.Events.Emit("cloudsmith.package.event", eventData)
+```
+
+**Then update the frontend mapper** (`PackageEventData` interface) to match:
+```ts
+interface PackageEventData {
+  event?: string;          // "package.synced"
+  package?: {
+    name?: string;         // package name
+    version?: string;
+    format?: string;
+    namespace?: string;    // owner/org
+    repository?: string;   // repo slug
+  };
+}
+```
+
+### 10. Fix Component `eventSections` — Never Return an Empty Array
+
+In a `ComponentBaseMapper.props()`, always build proper `EventSection[]` instead of returning an empty array. An empty `eventSections: []` means the canvas node never shows run status.
+
+**Pattern** (same as `dockerhub/get_image_tag.ts`, `smtp/send_email.ts`, etc.):
+```ts
+// In props():
+eventSections: lastExecution ? getMyEventSections(context.nodes, lastExecution, componentName) : undefined,
+
+// Helper function:
+function getMyEventSections(nodes, execution, componentName): EventSection[] {
+  const rootTriggerNode = nodes.find((n) => n.id === execution.rootEvent?.nodeId);
+  const rootTriggerRenderer = getTriggerRenderer(rootTriggerNode?.componentName!);
+  const { title } = rootTriggerRenderer.getTitleAndSubtitle({ event: execution.rootEvent });
+  return [{
+    receivedAt: new Date(execution.createdAt!),
+    eventTitle: title,
+    eventSubtitle: formatTimeAgo(new Date(execution.createdAt!)),
+    eventState: getState(componentName)(execution),
+    eventId: execution.rootEvent!.id!,
+  }];
+}
+```
+
+### 11. Register Icons in `BuildingBlocksSidebar` — Third Icon Location
+
+`BuildingBlocksSidebar/index.tsx` (the drag-to-canvas component picker) has its **own** two `appLogoMap` objects (one for category headers and one for individual block list items) that are completely separate from `integrationIcons.tsx`. Failing to register here leaves the component picker icon blank.
+
+**Steps** (in addition to the two maps in `integrationIcons.tsx`):
+1. Add import at the top of `BuildingBlocksSidebar/index.tsx`:
+   ```ts
+   import <name>Icon from "@/assets/icons/integrations/<name>.svg";
+   ```
+2. Add `<integrationName>: <name>Icon` to **both** `appLogoMap` objects inside the file (search for the two `const appLogoMap:` declarations).
+
+### 12. Summary of Common Integration Mistakes to Avoid
 
 | Mistake | Correct Approach |
 |---|---|
@@ -258,9 +348,12 @@ When adding an SVG icon, it **must** have a `viewBox` attribute. Without it, bro
 | Used wrong auth endpoint (`/user/`) | Verify credential-check endpoint from SDK (e.g. `/user/self/`) |
 | Used wrong webhook request field (`webhook_url`) | Check SDK `attribute_map` — Cloudsmith uses `target_url`, not `webhook_url` |
 | Omitted required `templates` field in webhook request | Check SDK `__init__` for unconditionally-set fields; each event needs a template entry |
-| Used provider-internal jargon ("Namespace") | Use provider's own UI terminology ("Workspace") |
-| Added SVG but didn't register in icon maps | Add to **both** `INTEGRATION_APP_LOGO_MAP` and `APP_LOGO_MAP` |
+| Read event type from wrong field in webhook payload | Read the provider docs; Cloudsmith sends `meta.event_id`, not a root `"event"` field |
+| Accessed package data at wrong path in webhook payload | Cloudsmith sends `data.*` flat — not `data.package.name` |
+| `eventSections: []` (empty array) in component mapper | Always build sections via a helper function so run status shows on canvas |
+| Added SVG but didn't register in icon maps | Add to both maps in `integrationIcons.tsx` AND both maps in `BuildingBlocksSidebar/index.tsx` |
 | SVG has `width`/`height` but no `viewBox` | Always use Simple Icons CDN SVG which includes `viewBox="0 0 24 24"` |
+| Used provider-internal jargon ("Namespace") | Use provider's own UI terminology ("Workspace") |
 | Forgot `iconSrc` in component/trigger mapper | Set `iconSrc: <name>Icon` in all mapper `props()` / `getTriggerProps()` returns |
 | Didn't run `make gen.components.docs` | Always regenerate after config field changes |
 | Renamed config field but left old key in tests | Update all `_test.go` fixtures to use the new key |
