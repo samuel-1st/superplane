@@ -179,40 +179,75 @@ When a configuration field key is renamed (e.g. `namespace` → `workspace`), up
 - `*_test.go` files in the integration package
 - Any field reference in assertions (e.g. `assert.Equal(t, "my-org", client.Workspace)`)
 
-### 7. Verify Every API Request Field Name Against the SDK
+### 7. Verify Every API Request Field Name AND All Required Fields Against the SDK
 
-Before writing a `struct` for an API request body, **always check the provider's official SDK for the exact JSON field names** — do not guess from similar APIs or common conventions.
+Before writing a `struct` for an API request body, **always check the provider's official SDK for the exact JSON field names AND which fields are required** — do not guess from similar APIs or common conventions.
 
-**How to check:**
+**How to check field names and required status:**
 ```python
 import cloudsmith_api, inspect
-src = inspect.getsource(cloudsmith_api.RepositoryWebhookRequest)
-# Print attribute_map to see JSON key names
-print(cloudsmith_api.RepositoryWebhookRequest.attribute_map)
+req = cloudsmith_api.RepositoryWebhookRequest
+# See all JSON key names
+print(req.attribute_map)
+# See all field types
+print(req.swagger_types)
+# Inspect the __init__ to see which fields are required vs. optional
+src = inspect.getsource(req.__init__)
+print(src)
 ```
+
+Fields set with `self.field = value` (not inside `if value is not None`) are **required** — omitting them returns a 422 from the API.
 
 - Cloudsmith mistake: used `webhook_url` in the webhook creation request — the correct field is `target_url`.
-- Wrong field names cause silent 4xx failures from the API, with the error stored as "failed to create webhook: request failed with 400: ..." on the canvas node.
+- Cloudsmith mistake: omitted the `templates` field entirely — it is required by the Cloudsmith API. Each subscribed event needs a corresponding `WebhookTemplate` entry (with `event` = event name and `template` = `""` for the default JSON payload format).
 
-Add a test assertion that reads back the HTTP request body and checks that required fields are present (and wrong names are absent):
+**Pattern for the fix:**
 ```go
-require.Len(t, httpCtx.Requests, 1)
-var reqBody map[string]any
-require.NoError(t, json.NewDecoder(httpCtx.Requests[0].Body).Decode(&reqBody))
-assert.Contains(t, reqBody, "target_url")
-assert.NotContains(t, reqBody, "webhook_url")
+type WebhookTemplate struct {
+    Event    string `json:"event"`
+    Template string `json:"template"`
+}
+
+// One template per subscribed event; empty Template string = default JSON payload.
+templates := make([]WebhookTemplate, 0, len(events))
+for _, event := range events {
+    templates = append(templates, WebhookTemplate{Event: event, Template: ""})
+}
 ```
 
-### 8. Summary of Common Integration Mistakes to Avoid
+Add test assertions that read back the HTTP request body and check that required fields are present:
+```go
+require.Len(t, httpCtx.Requests, 1)
+bodyBytes, _ := io.ReadAll(httpCtx.Requests[0].Body)
+var reqBody map[string]any
+require.NoError(t, json.Unmarshal(bodyBytes, &reqBody))
+assert.Contains(t, reqBody, "target_url")
+assert.Contains(t, reqBody, "templates")
+```
+
+### 8. Use Scalable SVGs — Always Include a `viewBox`
+
+When adding an SVG icon, it **must** have a `viewBox` attribute. Without it, browsers cannot scale the image down from its natural size, so the icon appears blank or clipped when rendered at 16×16 px.
+
+- Cloudsmith mistake: the `cloudsmith.svg` had `width="200" height="200"` but no `viewBox`, causing the icon to be invisible in the canvas sidebar and header.
+- Fix: always use the SVG from Simple Icons CDN — it always includes `viewBox="0 0 24 24"` and no fixed dimensions:
+  ```
+  https://cdn.jsdelivr.net/npm/simple-icons/icons/<name>.svg
+  ```
+- **Do not** use SVGs that only have `width`/`height` without `viewBox`.
+
+### 9. Summary of Common Integration Mistakes to Avoid
 
 | Mistake | Correct Approach |
 |---|---|
 | Assumed `/v1/` in base URL | Always verify base URL from official SDK |
 | Used wrong auth endpoint (`/user/`) | Verify credential-check endpoint from SDK (e.g. `/user/self/`) |
 | Used wrong webhook request field (`webhook_url`) | Check SDK `attribute_map` — Cloudsmith uses `target_url`, not `webhook_url` |
+| Omitted required `templates` field in webhook request | Check SDK `__init__` for unconditionally-set fields; each event needs a template entry |
 | Used provider-internal jargon ("Namespace") | Use provider's own UI terminology ("Workspace") |
 | Added SVG but didn't register in icon maps | Add to **both** `INTEGRATION_APP_LOGO_MAP` and `APP_LOGO_MAP` |
+| SVG has `width`/`height` but no `viewBox` | Always use Simple Icons CDN SVG which includes `viewBox="0 0 24 24"` |
 | Forgot `iconSrc` in component/trigger mapper | Set `iconSrc: <name>Icon` in all mapper `props()` / `getTriggerProps()` returns |
 | Didn't run `make gen.components.docs` | Always regenerate after config field changes |
 | Renamed config field but left old key in tests | Update all `_test.go` fixtures to use the new key |
-| No test assertion on HTTP request body fields | Add test to verify exact JSON field names are correct |
+| No test assertion on HTTP request body fields | Add test to verify exact JSON field names and all required fields are present |
