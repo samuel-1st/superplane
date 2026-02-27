@@ -1,131 +1,20 @@
-ARG GO_VERSION=1.25.3
-ARG UBUNTU_VERSION=22.04
-ARG BUILDER_IMAGE="ubuntu:${UBUNTU_VERSION}"
-ARG RUNNER_IMAGE="ubuntu:${UBUNTU_VERSION}"
+# Use Node base image (change if your stack is different)
+FROM node:20
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Base stage with common dependencies.
-# Based on this, the dev and builder stages are created.
-# ----------------------------------------------------------------------------------------------------------------------
-
-FROM ${BUILDER_IMAGE} AS base
-
-WORKDIR /tmp
-
-COPY scripts/docker scripts
-
-ENV GO_VERSION=1.25.3
-ENV PATH="/usr/local/go/bin:${PATH}"
-ENV GOPATH="/go"
-ENV GOBIN="/go/bin"
-ENV PATH="${GOBIN}:${PATH}"
-ENV GOPROXY="https://proxy.golang.org,direct"
-
-RUN bash scripts/install-go.sh ${GO_VERSION}
-RUN bash scripts/install-nodejs.sh
-RUN bash scripts/install-postgresql-client.sh
-RUN bash scripts/install-gomigrate.sh
-RUN bash scripts/install-protoc.sh
-
+# Set working directory
 WORKDIR /app
 
-COPY pkg pkg
-COPY cmd cmd
-COPY go.mod go.mod
-COPY go.sum go.sum
-COPY db/migrations /app/db/migrations
-COPY db/data_migrations /app/db/data_migrations
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-COPY web_src web_src
-COPY protos protos
-COPY api/swagger api/swagger
-COPY rbac rbac
-COPY templates templates
+# Install make
+RUN apt-get update && apt-get install -y make && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Copy project files
+COPY . .
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Development stage with tools installed.
-# Used for local development and testing.
-# ----------------------------------------------------------------------------------------------------------------------
+# Run setup
+RUN make dev.setup
 
-FROM base AS dev
+# Expose app port
+EXPOSE 8000
 
-WORKDIR /app
-
-# Install dev tools with retries to mitigate intermittent network flakes
-# Pin protoc plugin versions to ensure consistent proto generation
-RUN bash /tmp/scripts/retry.sh 6 2s go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
-RUN bash /tmp/scripts/retry.sh 6 2s go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
-RUN bash /tmp/scripts/retry.sh 6 2s go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.26.3
-RUN bash /tmp/scripts/retry.sh 6 2s go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.26.3
-RUN bash /tmp/scripts/retry.sh 6 2s go install github.com/air-verse/air@latest
-RUN bash /tmp/scripts/retry.sh 6 2s go install github.com/mgechev/revive@v1.8.0
-RUN bash /tmp/scripts/retry.sh 6 2s go install gotest.tools/gotestsum@v1.12.3
-
-# Inject test files and dev entrypoint
-COPY test test
-COPY docker-entrypoint.dev.sh /app/docker-entrypoint.dev.sh
-
-CMD [ "/bin/bash",  "-c \"while sleep 1000; do :; done\"" ]
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Builder stage to create production artifacts.
-# Used to build the final runner image.
-# ----------------------------------------------------------------------------------------------------------------------
-
-FROM base AS builder
-
-ARG BASE_URL=https://app.superplane.com
-ARG VITE_ENABLE_CUSTOM_COMPONENTS=false
-
-
-WORKDIR /app
-RUN rm -rf build && go build -o build/superplane cmd/server/main.go
-
-WORKDIR /app/web_src
-RUN npm install
-RUN VITE_BASE_URL=$BASE_URL VITE_ENABLE_CUSTOM_COMPONENTS=$VITE_ENABLE_CUSTOM_COMPONENTS npm run build
-
-# ----------------------------------------------------------------------------------------------------------------------
-# Runner stage to run the application.
-# Used as the final image.
-# ----------------------------------------------------------------------------------------------------------------------
-
-FROM ${RUNNER_IMAGE} AS runner
-
-LABEL org.opencontainers.image.title="superplane" \
-  org.opencontainers.image.description="SuperPlane" \
-  org.opencontainers.image.vendor="SuperPlane" \
-  org.opencontainers.image.source="https://github.com/superplanehq/superplane" \
-  org.opencontainers.image.url="https://superplane.com" \
-  org.opencontainers.image.documentation="https://docs.superplane.com"
-
-# postgresql-client needs to be installed here too,
-# otherwise the createdb command won't work.
-# Install PostgreSQL 17.5 client tools
-COPY scripts/docker/install-postgresql-client.sh install-postgresql-client.sh
-RUN bash install-postgresql-client.sh
-
-# We don't need Docker health checks, since these containers
-# are intended to run in Kubernetes pods, which have probes.
-HEALTHCHECK NONE
-
-WORKDIR /app
-RUN chown nobody /app
-
-# Copy every artifact needed to run the application from previous stages
-COPY --from=builder --chown=nobody:root /usr/bin/createdb /usr/bin/createdb
-COPY --from=builder --chown=nobody:root /usr/bin/migrate /usr/bin/migrate
-COPY --from=builder --chown=nobody:root /app/build/superplane /app/build/superplane
-COPY --from=builder --chown=nobody:root /app/docker-entrypoint.sh /app/docker-entrypoint.sh
-COPY --from=builder --chown=nobody:root /app/db/migrations /app/db/migrations
-COPY --from=builder --chown=nobody:root /app/db/data_migrations /app/db/data_migrations
-COPY --from=builder --chown=nobody:root /app/pkg/web/assets/dist /app/pkg/web/assets/dist
-COPY --from=builder --chown=nobody:root /app/api/swagger /app/api/swagger
-COPY --from=builder --chown=nobody:root /app/rbac /app/rbac
-COPY --from=builder --chown=nobody:root /app/templates /app/templates
-
-USER nobody
-
-CMD ["bash", "/app/docker-entrypoint.sh"]
+# Start app
+CMD ["make", "dev.start"]
