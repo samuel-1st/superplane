@@ -122,26 +122,40 @@ When creating a **new integration** (`pkg/integrations/<name>/`), follow every s
 - This applies to both the `Name` (the JSON key) and the `Label` (the human-readable UI label) in `configuration.Field`.
 - Update the `Instructions()` string as well so it refers to the correct term.
 
-### 3. Add the Integration Icon — Both Places
+### 3. Add the Integration Icon — Three Places, Not Two
 
-Adding an SVG file alone is **not enough**. The icon must be registered in **two maps** in `web_src/src/ui/componentSidebar/integrationIcons.tsx`:
+Adding an SVG file alone is **not enough**. The icon must be registered in **three separate places**:
+
+**Place 1 & 2 — `web_src/src/ui/componentSidebar/integrationIcons.tsx`** (canvas node header + settings sidebar):
 
 1. `INTEGRATION_APP_LOGO_MAP` — used on the Settings / Integrations page and in the connection selector inside the node settings sidebar.
 2. `APP_LOGO_MAP` — used in the canvas node header.
 
+**Place 3 — `web_src/src/ui/BuildingBlocksSidebar/index.tsx`** (component selection sidebar — the panel used to drag blocks onto the canvas):
+
+This file has its **own** two separate `appLogoMap` objects (one for category headers, one for individual block items) that are completely independent of `integrationIcons.tsx`. If the icon is not registered here, the component selection sidebar shows no icon.
+
 **Steps:**
-1. Download the official SVG from Simple Icons (`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/<name>.svg`) and save it to `web_src/src/assets/icons/integrations/<name>.svg`.
+1. Download the official SVG from Simple Icons (`https://cdn.jsdelivr.net/npm/simple-icons/icons/<name>.svg`) and save it to `web_src/src/assets/icons/integrations/<name>.svg`.
 2. Add an import at the top of `integrationIcons.tsx`:
    ```ts
    import <name>Icon from "@/assets/icons/integrations/<name>.svg";
    ```
-3. Add an entry to **both** `INTEGRATION_APP_LOGO_MAP` and `APP_LOGO_MAP`:
+3. Add an entry to **both** `INTEGRATION_APP_LOGO_MAP` and `APP_LOGO_MAP` in `integrationIcons.tsx`:
+   ```ts
+   <integrationName>: <name>Icon,
+   ```
+4. Add an import at the top of `BuildingBlocksSidebar/index.tsx`:
+   ```ts
+   import <name>Icon from "@/assets/icons/integrations/<name>.svg";
+   ```
+5. Add an entry to **both** `appLogoMap` objects inside `BuildingBlocksSidebar/index.tsx` (one around line 1023, one around line 1152):
    ```ts
    <integrationName>: <name>Icon,
    ```
    The key must match `Integration.Name()` in the backend (lowercase, e.g. `"cloudsmith"`).
 
-If the step above is skipped, the integration page and canvas sidebar show a generic Lucide icon fallback instead of the brand logo.
+If any of these steps is skipped, the icon will be missing in one or more UI surfaces (integration page, canvas node header, or component selection sidebar).
 
 ### 4. Set `iconSrc` in Frontend Mappers
 

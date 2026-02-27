@@ -110,7 +110,8 @@ export const onPackageEventCustomFieldRenderer: CustomFieldRenderer = {
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Cloudsmith Webhook</span>
             <div className="text-xs text-gray-800 dark:text-gray-100 mt-2 border-1 border-gray-300 dark:border-gray-600 px-2.5 py-2 bg-gray-50 dark:bg-gray-800 rounded-md">
               <p>
-                A webhook for <strong>{repository}</strong> will be created in Cloudsmith automatically when the canvas is saved.
+                A webhook for <strong>{repository}</strong> will be created in Cloudsmith automatically when the canvas
+                is saved.
               </p>
               <div className="mt-3">
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Webhook URL</span>

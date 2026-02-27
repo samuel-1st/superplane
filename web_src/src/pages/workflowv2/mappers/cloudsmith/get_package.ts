@@ -2,13 +2,14 @@ import {
   ComponentBaseContext,
   ComponentBaseMapper,
   ExecutionDetailsContext,
+  ExecutionInfo,
   NodeInfo,
   OutputPayload,
   SubtitleContext,
 } from "../types";
-import { ComponentBaseProps } from "@/ui/componentBase";
+import { ComponentBaseProps, EventSection } from "@/ui/componentBase";
 import { getBackgroundColorClass, getColorClass } from "@/utils/colors";
-import { getStateMap } from "..";
+import { getState, getStateMap, getTriggerRenderer } from "..";
 import { formatTimeAgo } from "@/utils/date";
 import { MetadataItem } from "@/ui/metadataList";
 import { PackageInfo } from "./types";
@@ -31,7 +32,7 @@ export const getPackageMapper: ComponentBaseMapper = {
       iconColor: getColorClass(context.componentDefinition.color),
       collapsedBackground: getBackgroundColorClass(context.componentDefinition.color),
       collapsed: context.node.isCollapsed,
-      eventSections: lastExecution ? [] : undefined,
+      eventSections: lastExecution ? getPackageEventSections(context.nodes, lastExecution, componentName) : undefined,
       includeEmptyState: !lastExecution,
       metadata: getPackageMetadataList(context.node),
       eventStateMap: getStateMap(componentName),
@@ -78,4 +79,20 @@ function getPackageMetadataList(node: NodeInfo): MetadataItem[] {
   }
 
   return metadata;
+}
+
+function getPackageEventSections(nodes: NodeInfo[], execution: ExecutionInfo, componentName: string): EventSection[] {
+  const rootTriggerNode = nodes.find((n) => n.id === execution.rootEvent?.nodeId);
+  const rootTriggerRenderer = getTriggerRenderer(rootTriggerNode?.componentName!);
+  const { title } = rootTriggerRenderer.getTitleAndSubtitle({ event: execution.rootEvent });
+
+  return [
+    {
+      receivedAt: new Date(execution.createdAt!),
+      eventTitle: title,
+      eventSubtitle: formatTimeAgo(new Date(execution.createdAt!)),
+      eventState: getState(componentName)(execution),
+      eventId: execution.rootEvent!.id!,
+    },
+  ];
 }

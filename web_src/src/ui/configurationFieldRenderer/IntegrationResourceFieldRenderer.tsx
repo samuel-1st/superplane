@@ -280,7 +280,10 @@ export const IntegrationResourceFieldRenderer = ({
     }
 
     return (
-      <div data-testid={toTestId(`app-installation-resource-field-${field.name}`)} className="flex gap-1.5 items-center">
+      <div
+        data-testid={toTestId(`app-installation-resource-field-${field.name}`)}
+        className="flex gap-1.5 items-center"
+      >
         <div className="flex-1">{picker}</div>
         <button
           type="button"
