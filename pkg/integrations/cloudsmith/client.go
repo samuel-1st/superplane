@@ -142,10 +142,16 @@ func (c *Client) GetPackage(namespace, repo, identifier string) (*PackageInfo, e
 	return &pkg, nil
 }
 
+type WebhookTemplate struct {
+	Event    string `json:"event"`
+	Template string `json:"template"`
+}
+
 type CreateWebhookRequest struct {
-	TargetURL string   `json:"target_url"`
-	Events    []string `json:"events"`
-	IsActive  bool     `json:"is_active"`
+	TargetURL string            `json:"target_url"`
+	Events    []string          `json:"events"`
+	IsActive  bool              `json:"is_active"`
+	Templates []WebhookTemplate `json:"templates"`
 }
 
 type CreateWebhookResponse struct {
@@ -157,10 +163,16 @@ func (c *Client) CreateWebhook(namespace, repo, targetURL string, events []strin
 		return "", fmt.Errorf("namespace, repo, and targetURL are required")
 	}
 
+	templates := make([]WebhookTemplate, 0, len(events))
+	for _, event := range events {
+		templates = append(templates, WebhookTemplate{Event: event, Template: ""})
+	}
+
 	payload, err := json.Marshal(CreateWebhookRequest{
 		TargetURL: targetURL,
 		Events:    events,
 		IsActive:  true,
+		Templates: templates,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal webhook request: %w", err)

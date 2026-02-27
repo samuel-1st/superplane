@@ -74,6 +74,7 @@ func Test__OnPackageEvent__Setup(t *testing.T) {
 		assert.NotEmpty(t, stored.WebhookURL)
 
 		// Verify the HTTP request used the correct "target_url" field (not "webhook_url")
+		// and includes the required "templates" field per the Cloudsmith API spec
 		require.Len(t, httpCtx.Requests, 1)
 		bodyBytes, err := io.ReadAll(httpCtx.Requests[0].Body)
 		require.NoError(t, err)
@@ -81,6 +82,13 @@ func Test__OnPackageEvent__Setup(t *testing.T) {
 		require.NoError(t, json.Unmarshal(bodyBytes, &reqBody))
 		assert.Contains(t, reqBody, "target_url", "request body must use 'target_url' per the Cloudsmith API spec")
 		assert.NotContains(t, reqBody, "webhook_url", "request body must not use 'webhook_url'")
+		assert.Contains(t, reqBody, "templates", "request body must include 'templates' field (required by Cloudsmith API)")
+		templates, ok := reqBody["templates"].([]any)
+		require.True(t, ok, "templates must be an array")
+		require.Len(t, templates, 1, "one template per event")
+		tmpl, ok := templates[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "package.synced", tmpl["event"])
 	})
 
 	t.Run("already configured -> skips setup", func(t *testing.T) {
