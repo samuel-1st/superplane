@@ -13,6 +13,9 @@ import { scheduleTriggerRenderer, scheduleCustomFieldRenderer } from "./schedule
 import { webhookTriggerRenderer, webhookCustomFieldRenderer } from "./webhook";
 import { noopMapper } from "./noop";
 import { addMemoryMapper } from "./addMemory";
+import { deleteMemoryMapper } from "./deleteMemory";
+import { readMemoryMapper } from "./readMemory";
+import { updateMemoryMapper } from "./updateMemory";
 import { ifMapper, IF_STATE_REGISTRY } from "./if";
 import { httpMapper, HTTP_STATE_REGISTRY } from "./http";
 import {
@@ -87,6 +90,11 @@ import {
   eventStateRegistry as incidentEventStateRegistry,
   customFieldRenderers as incidentCustomFieldRenderers,
 } from "./incident/index";
+import {
+  componentMappers as launchdarklyComponentMappers,
+  triggerRenderers as launchdarklyTriggerRenderers,
+  eventStateRegistry as launchdarklyEventStateRegistry,
+} from "./launchdarkly/index";
 import {
   componentMappers as awsComponentMappers,
   triggerRenderers as awsTriggerRenderers,
@@ -168,6 +176,12 @@ import {
   triggerRenderers as dockerhubTriggerRenderers,
   eventStateRegistry as dockerhubEventStateRegistry,
 } from "./dockerhub";
+
+import {
+  componentMappers as honeycombComponentMappers,
+  triggerRenderers as honeycombTriggerRenderers,
+  eventStateRegistry as honeycombEventStateRegistry,
+} from "./honeycomb/index";
 import {
   componentMappers as gcpComponentMappers,
   customFieldRenderers as gcpCustomFieldRenderers,
@@ -203,6 +217,9 @@ const triggerRenderers: Record<string, TriggerRenderer> = {
 const componentBaseMappers: Record<string, ComponentBaseMapper> = {
   noop: noopMapper,
   addMemory: addMemoryMapper,
+  deleteMemory: deleteMemoryMapper,
+  readMemory: readMemoryMapper,
+  updateMemory: updateMemoryMapper,
   if: ifMapper,
   http: httpMapper,
   ssh: sshMapper,
@@ -230,6 +247,7 @@ const appMappers: Record<string, Record<string, ComponentBaseMapper>> = {
   render: renderComponentMappers,
   rootly: rootlyComponentMappers,
   incident: incidentComponentMappers,
+  launchdarkly: launchdarklyComponentMappers,
   aws: awsComponentMappers,
   discord: discordComponentMappers,
   telegram: telegramComponentMappers,
@@ -244,6 +262,7 @@ const appMappers: Record<string, Record<string, ComponentBaseMapper>> = {
   jfrogArtifactory: jfrogArtifactoryComponentMappers,
   statuspage: statuspageComponentMappers,
   dockerhub: dockerhubComponentMappers,
+  honeycomb: honeycombComponentMappers,
   harness: harnessComponentMappers,
   servicenow: servicenowComponentMappers,
 };
@@ -264,6 +283,7 @@ const appTriggerRenderers: Record<string, Record<string, TriggerRenderer>> = {
   render: renderTriggerRenderers,
   rootly: rootlyTriggerRenderers,
   incident: incidentTriggerRenderers,
+  launchdarkly: launchdarklyTriggerRenderers,
   aws: awsTriggerRenderers,
   discord: discordTriggerRenderers,
   telegram: telegramTriggerRenderers,
@@ -279,6 +299,7 @@ const appTriggerRenderers: Record<string, Record<string, TriggerRenderer>> = {
   jfrogArtifactory: jfrogArtifactoryTriggerRenderers,
   statuspage: statuspageTriggerRenderers,
   dockerhub: dockerhubTriggerRenderers,
+  honeycomb: honeycombTriggerRenderers,
   harness: harnessTriggerRenderers,
   servicenow: servicenowTriggerRenderers,
 };
@@ -301,6 +322,7 @@ const appEventStateRegistries: Record<string, Record<string, EventStateRegistry>
   rootly: rootlyEventStateRegistry,
   incident: incidentEventStateRegistry,
   octopus: octopusEventStateRegistry,
+  launchdarkly: launchdarklyEventStateRegistry,
   openai: openaiEventStateRegistry,
   circleci: circleCIEventStateRegistry,
   claude: claudeEventStateRegistry,
@@ -313,6 +335,7 @@ const appEventStateRegistries: Record<string, Record<string, EventStateRegistry>
   gitlab: gitlabEventStateRegistry,
   jfrogArtifactory: jfrogArtifactoryEventStateRegistry,
   dockerhub: dockerhubEventStateRegistry,
+  honeycomb: honeycombEventStateRegistry,
   harness: harnessEventStateRegistry,
   servicenow: servicenowEventStateRegistry,
 };
