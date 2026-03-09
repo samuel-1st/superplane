@@ -1,0 +1,20 @@
+{
+  "data": {
+    "id": "4de7ac8b-495b-4884-9a69-1050bx3b15ed",
+    "name": "my-load-balancer",
+    "ip": "104.131.186.241",
+    "status": "new",
+    "size_slug": "lb-small",
+    "region": {"name": "New York 3", "slug": "nyc3"},
+    "forwarding_rules": [
+      {
+        "entry_protocol": "http",
+        "entry_port": 80,
+        "target_protocol": "http",
+        "target_port": 8080
+      }
+    ],
+    "droplet_ids": [],
+    "tag": []
+  }
+}

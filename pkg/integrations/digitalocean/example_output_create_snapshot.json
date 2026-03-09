@@ -1,0 +1,12 @@
+{
+  "data": {
+    "id": 36804752,
+    "status": "completed",
+    "type": "snapshot",
+    "started_at": "2014-11-14T16:29:21Z",
+    "completed_at": "2014-11-14T16:35:06Z",
+    "resource_id": 98765432,
+    "resource_type": "droplet",
+    "region_slug": "nyc3"
+  }
+}

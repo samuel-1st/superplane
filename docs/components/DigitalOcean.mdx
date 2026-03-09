@@ -9,7 +9,18 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 ## Actions
 
 <CardGrid>
+  <LinkCard title="Assign Reserved IP" href="#assign-reserved-ip" description="Assign or unassign a DigitalOcean Reserved IP to a Droplet" />
+  <LinkCard title="Create DNS Record" href="#create-dns-record" description="Create a DNS record for a DigitalOcean domain" />
   <LinkCard title="Create Droplet" href="#create-droplet" description="Create a new DigitalOcean Droplet" />
+  <LinkCard title="Create Load Balancer" href="#create-load-balancer" description="Create a DigitalOcean Load Balancer" />
+  <LinkCard title="Create Snapshot" href="#create-snapshot" description="Create a snapshot of a DigitalOcean Droplet" />
+  <LinkCard title="Delete DNS Record" href="#delete-dns-record" description="Delete a DNS record from a DigitalOcean domain" />
+  <LinkCard title="Delete Droplet" href="#delete-droplet" description="Delete a DigitalOcean Droplet" />
+  <LinkCard title="Delete Load Balancer" href="#delete-load-balancer" description="Delete a DigitalOcean Load Balancer" />
+  <LinkCard title="Delete Snapshot" href="#delete-snapshot" description="Delete a DigitalOcean snapshot" />
+  <LinkCard title="Get Droplet" href="#get-droplet" description="Retrieve a DigitalOcean Droplet by ID" />
+  <LinkCard title="Manage Droplet Power" href="#manage-droplet-power" description="Manage the power state of a DigitalOcean Droplet" />
+  <LinkCard title="Upsert DNS Record" href="#upsert-dns-record" description="Create or update a DNS record for a DigitalOcean domain" />
 </CardGrid>
 
 ## Instructions
@@ -26,6 +37,78 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 5. Copy the token and paste it below
 
 > **Note**: The token is only shown once. Store it securely if needed elsewhere.
+
+<a id="assign-reserved-ip"></a>
+
+## Assign Reserved IP
+
+The Assign Reserved IP component assigns or unassigns a DigitalOcean reserved IP address to a droplet.
+
+### Use Cases
+
+- **Failover**: Reassign a reserved IP from a failed droplet to a healthy one
+- **Blue/green deployments**: Move a reserved IP between deployments
+- **Release IPs**: Unassign a reserved IP when a droplet is decommissioned
+
+### Configuration
+
+- **Reserved IP**: The reserved IP address to act on (required)
+- **Action**: Whether to assign or unassign (required)
+- **Droplet ID**: The numeric ID of the target droplet (required when assigning)
+
+### Output
+
+Returns the DigitalOcean reserved IP action result.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "id": 12345,
+    "status": "completed",
+    "type": "assign"
+  }
+}
+```
+
+<a id="create-dns-record"></a>
+
+## Create DNS Record
+
+The Create DNS Record component adds a new DNS record to a DigitalOcean domain.
+
+### Use Cases
+
+- **Automated DNS management**: Add records as part of infrastructure provisioning
+- **Dynamic DNS**: Create records that point to newly created droplets
+
+### Configuration
+
+- **Domain**: The domain name to add the record to (required)
+- **Type**: The DNS record type (required)
+- **Name**: The host name, alias, or service (required)
+- **Data**: The value of the record, e.g. an IP address (required)
+- **TTL**: Time to live in seconds (optional, default 1800)
+- **Priority**: Priority for MX or SRV records (optional)
+
+### Output
+
+Returns the created DNS record object.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "data": "1.2.3.4",
+    "id": 12345678,
+    "name": "www",
+    "ttl": 1800,
+    "type": "A"
+  }
+}
+```
 
 <a id="create-droplet"></a>
 
@@ -90,6 +173,351 @@ Returns the created droplet object including:
       "web"
     ],
     "vcpus": 1
+  }
+}
+```
+
+<a id="create-load-balancer"></a>
+
+## Create Load Balancer
+
+The Create Load Balancer component provisions a new DigitalOcean load balancer.
+
+### Use Cases
+
+- **Traffic distribution**: Automatically set up load balancing for new application deployments
+- **High availability**: Create load balancers as part of a multi-droplet infrastructure workflow
+
+### Configuration
+
+- **Name**: The name of the load balancer (required)
+- **Region**: The region where the load balancer will be created (required)
+- **Size**: The size of the load balancer (optional)
+- **Entry Protocol**: The protocol for incoming traffic (required)
+- **Entry Port**: The port for incoming traffic (required)
+- **Target Protocol**: The protocol for forwarding to backend droplets (required)
+- **Target Port**: The port on backend droplets (required)
+- **Droplet IDs**: Numeric IDs of droplets to add as backends (optional)
+- **Tags**: Tags to apply to the load balancer (optional)
+
+### Output
+
+Returns the created load balancer object including id, name, ip, and status.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "droplet_ids": [],
+    "forwarding_rules": [
+      {
+        "entry_port": 80,
+        "entry_protocol": "http",
+        "target_port": 8080,
+        "target_protocol": "http"
+      }
+    ],
+    "id": "4de7ac8b-495b-4884-9a69-1050bx3b15ed",
+    "ip": "104.131.186.241",
+    "name": "my-load-balancer",
+    "region": {
+      "name": "New York 3",
+      "slug": "nyc3"
+    },
+    "size_slug": "lb-small",
+    "status": "new",
+    "tag": []
+  }
+}
+```
+
+<a id="create-snapshot"></a>
+
+## Create Snapshot
+
+The Create Snapshot component takes a snapshot of a DigitalOcean droplet.
+
+### Use Cases
+
+- **Backups**: Capture the state of a droplet before changes
+- **Cloning**: Create snapshots to use as base images for new droplets
+
+### Configuration
+
+- **Droplet ID**: The numeric ID of the droplet to snapshot (required, supports expressions)
+- **Snapshot Name**: The name for the new snapshot (required, supports expressions)
+
+### Output
+
+Returns the completed DigitalOcean action object once the snapshot is created.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "completed_at": "2014-11-14T16:35:06Z",
+    "id": 36804752,
+    "region_slug": "nyc3",
+    "resource_id": 98765432,
+    "resource_type": "droplet",
+    "started_at": "2014-11-14T16:29:21Z",
+    "status": "completed",
+    "type": "snapshot"
+  }
+}
+```
+
+<a id="delete-dns-record"></a>
+
+## Delete DNS Record
+
+The Delete DNS Record component removes a DNS record from a DigitalOcean domain.
+
+### Use Cases
+
+- **Cleanup**: Remove DNS records when infrastructure is decommissioned
+- **DNS rotation**: Delete old records as part of a DNS update workflow
+
+### Configuration
+
+- **Domain**: The domain name containing the record (required)
+- **Record ID**: The numeric ID of the DNS record to delete (required, supports expressions)
+
+### Output
+
+Returns a confirmation object with deleted status, domain, and record ID.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "deleted": true,
+    "domain": "example.com",
+    "recordID": 12345678
+  }
+}
+```
+
+<a id="delete-droplet"></a>
+
+## Delete Droplet
+
+The Delete Droplet component permanently deletes a DigitalOcean droplet.
+
+### Use Cases
+
+- **Cleanup**: Remove droplets after a job or test run completes
+- **Cost management**: Automatically terminate unused instances
+
+### Configuration
+
+- **Droplet ID**: The numeric ID of the droplet to delete (required, supports expressions)
+
+### Output
+
+Returns a confirmation object with deleted status and the droplet ID.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "deleted": true,
+    "dropletID": 98765432
+  }
+}
+```
+
+<a id="delete-load-balancer"></a>
+
+## Delete Load Balancer
+
+The Delete Load Balancer component permanently removes a DigitalOcean load balancer.
+
+### Use Cases
+
+- **Cleanup**: Remove load balancers when decommissioning infrastructure
+- **Cost management**: Delete unused load balancers to avoid billing
+
+### Configuration
+
+- **Load Balancer ID**: The ID of the load balancer to delete (required, supports expressions)
+
+### Output
+
+Returns a confirmation object with deleted status and the load balancer ID.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "deleted": true,
+    "loadBalancerID": "4de7ac8b-495b-4884-9a69-1050bx3b15ed"
+  }
+}
+```
+
+<a id="delete-snapshot"></a>
+
+## Delete Snapshot
+
+The Delete Snapshot component permanently deletes a DigitalOcean snapshot.
+
+### Use Cases
+
+- **Storage cleanup**: Remove outdated snapshots to reduce storage costs
+- **Post-migration cleanup**: Delete temporary snapshots after they are no longer needed
+
+### Configuration
+
+- **Snapshot ID**: The ID of the snapshot to delete (required, supports expressions)
+
+### Output
+
+Returns a confirmation object with deleted status and the snapshot ID.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "deleted": true,
+    "snapshotID": "my-snapshot-id"
+  }
+}
+```
+
+<a id="get-droplet"></a>
+
+## Get Droplet
+
+The Get Droplet component retrieves the details of an existing DigitalOcean droplet.
+
+### Use Cases
+
+- **Status checking**: Retrieve the current state of a droplet
+- **Inventory lookups**: Fetch droplet metadata for downstream workflow steps
+
+### Configuration
+
+- **Droplet ID**: The numeric ID of the droplet to retrieve (required, supports expressions)
+
+### Output
+
+Returns the droplet object including id, name, status, region, networks, and image information.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "disk": 25,
+    "id": 98765432,
+    "image": {
+      "id": 12345,
+      "name": "Ubuntu 24.04 (LTS) x64",
+      "slug": "ubuntu-24-04-x64"
+    },
+    "memory": 1024,
+    "name": "my-droplet",
+    "networks": {
+      "v4": [
+        {
+          "ip_address": "104.131.186.241",
+          "type": "public"
+        }
+      ]
+    },
+    "region": {
+      "name": "New York 3",
+      "slug": "nyc3"
+    },
+    "size_slug": "s-1vcpu-1gb",
+    "status": "active",
+    "tags": [
+      "web"
+    ],
+    "vcpus": 1
+  }
+}
+```
+
+<a id="manage-droplet-power"></a>
+
+## Manage Droplet Power
+
+The Manage Droplet Power component controls the power state of a DigitalOcean droplet.
+
+### Use Cases
+
+- **Scheduled shutdowns**: Power off droplets during off-hours
+- **Reboots**: Restart droplets after configuration changes
+- **Power cycling**: Force restart unresponsive droplets
+
+### Configuration
+
+- **Droplet ID**: The numeric ID of the droplet (required, supports expressions)
+- **Operation**: The power action to perform (required)
+
+### Output
+
+Returns the completed DigitalOcean action object.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "completed_at": "2014-11-14T16:30:06Z",
+    "id": 36804751,
+    "region_slug": "nyc3",
+    "resource_id": 98765432,
+    "resource_type": "droplet",
+    "started_at": "2014-11-14T16:29:21Z",
+    "status": "completed",
+    "type": "power_on"
+  }
+}
+```
+
+<a id="upsert-dns-record"></a>
+
+## Upsert DNS Record
+
+The Upsert DNS Record component creates or updates a DNS record in a DigitalOcean domain. If a record with the same name and type already exists it will be updated; otherwise a new record is created.
+
+### Use Cases
+
+- **Idempotent DNS management**: Ensure a record exists with the correct value without worrying about duplicates
+- **IP updates**: Point an existing hostname to a new IP address
+
+### Configuration
+
+- **Domain**: The domain name to manage the record in (required)
+- **Type**: The DNS record type (required)
+- **Name**: The host name, alias, or service being defined (required)
+- **Data**: The value of the record, e.g. an IP address (required)
+- **TTL**: Time to live in seconds (optional, default 1800)
+- **Priority**: Priority for MX or SRV records (optional)
+
+### Output
+
+Returns the created or updated DNS record object.
+
+### Example Output
+
+```json
+{
+  "data": {
+    "data": "1.2.3.4",
+    "id": 12345678,
+    "name": "www",
+    "ttl": 1800,
+    "type": "A"
   }
 }
 ```

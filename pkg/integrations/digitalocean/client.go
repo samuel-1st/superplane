@@ -309,3 +309,288 @@ func (c *Client) ListActions(resourceType string) ([]DOAction, error) {
 
 	return filtered, nil
 }
+
+// GetAction retrieves a single action by ID
+func (c *Client) GetAction(actionID int) (*DOAction, error) {
+	url := fmt.Sprintf("%s/actions/%d", c.BaseURL, actionID)
+	responseBody, err := c.execRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Action DOAction `json:"action"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return &response.Action, nil
+}
+
+// PostDropletAction performs an action on a droplet
+func (c *Client) PostDropletAction(dropletID int, body map[string]any) (*DOAction, error) {
+	url := fmt.Sprintf("%s/droplets/%d/actions", c.BaseURL, dropletID)
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
+	}
+	responseBody, err := c.execRequest(http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Action DOAction `json:"action"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return &response.Action, nil
+}
+
+// DeleteDroplet deletes a droplet by ID
+func (c *Client) DeleteDroplet(dropletID int) error {
+	url := fmt.Sprintf("%s/droplets/%d", c.BaseURL, dropletID)
+	_, err := c.execRequest(http.MethodDelete, url, nil)
+	return err
+}
+
+// Snapshot represents a DigitalOcean snapshot
+type Snapshot struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	ResourceID    string   `json:"resource_id"`
+	ResourceType  string   `json:"resource_type"`
+	Regions       []string `json:"regions"`
+	SizeGigabytes float64  `json:"size_gigabytes"`
+	CreatedAt     string   `json:"created_at"`
+}
+
+// DeleteSnapshot deletes a snapshot by ID
+func (c *Client) DeleteSnapshot(snapshotID string) error {
+	url := fmt.Sprintf("%s/snapshots/%s", c.BaseURL, snapshotID)
+	_, err := c.execRequest(http.MethodDelete, url, nil)
+	return err
+}
+
+// ListSnapshots retrieves all snapshots
+func (c *Client) ListSnapshots() ([]Snapshot, error) {
+	url := fmt.Sprintf("%s/snapshots", c.BaseURL)
+	responseBody, err := c.execRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Snapshots []Snapshot `json:"snapshots"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return response.Snapshots, nil
+}
+
+// Domain represents a DigitalOcean domain
+type Domain struct {
+	Name string `json:"name"`
+	TTL  int    `json:"ttl"`
+}
+
+// DNSRecord represents a DigitalOcean DNS record
+type DNSRecord struct {
+	ID       int    `json:"id"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Data     string `json:"data"`
+	TTL      int    `json:"ttl"`
+	Priority int    `json:"priority,omitempty"`
+}
+
+// DNSRecordRequest is the payload for creating/updating a DNS record
+type DNSRecordRequest struct {
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Data     string `json:"data"`
+	TTL      int    `json:"ttl"`
+	Priority int    `json:"priority,omitempty"`
+}
+
+// CreateDNSRecord creates a new DNS record for a domain
+func (c *Client) CreateDNSRecord(domain string, req DNSRecordRequest) (*DNSRecord, error) {
+	url := fmt.Sprintf("%s/domains/%s/records", c.BaseURL, domain)
+	b, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
+	}
+	responseBody, err := c.execRequest(http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		DomainRecord DNSRecord `json:"domain_record"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return &response.DomainRecord, nil
+}
+
+// DeleteDNSRecord deletes a DNS record from a domain
+func (c *Client) DeleteDNSRecord(domain string, recordID int) error {
+	url := fmt.Sprintf("%s/domains/%s/records/%d", c.BaseURL, domain, recordID)
+	_, err := c.execRequest(http.MethodDelete, url, nil)
+	return err
+}
+
+// ListDNSRecords retrieves DNS records for a domain, with optional query params
+func (c *Client) ListDNSRecords(domain string, queryParams ...string) ([]DNSRecord, error) {
+	url := fmt.Sprintf("%s/domains/%s/records", c.BaseURL, domain)
+	if len(queryParams) > 0 {
+		url += "?" + queryParams[0]
+	}
+	responseBody, err := c.execRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		DomainRecords []DNSRecord `json:"domain_records"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return response.DomainRecords, nil
+}
+
+// UpdateDNSRecord updates an existing DNS record
+func (c *Client) UpdateDNSRecord(domain string, recordID int, req DNSRecordRequest) (*DNSRecord, error) {
+	url := fmt.Sprintf("%s/domains/%s/records/%d", c.BaseURL, domain, recordID)
+	b, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
+	}
+	responseBody, err := c.execRequest(http.MethodPatch, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		DomainRecord DNSRecord `json:"domain_record"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return &response.DomainRecord, nil
+}
+
+// ListDomains retrieves all domains
+func (c *Client) ListDomains() ([]Domain, error) {
+	url := fmt.Sprintf("%s/domains", c.BaseURL)
+	responseBody, err := c.execRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Domains []Domain `json:"domains"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return response.Domains, nil
+}
+
+// ForwardingRule represents a load balancer forwarding rule
+type ForwardingRule struct {
+	EntryProtocol  string `json:"entry_protocol"`
+	EntryPort      int    `json:"entry_port"`
+	TargetProtocol string `json:"target_protocol"`
+	TargetPort     int    `json:"target_port"`
+}
+
+// LoadBalancer represents a DigitalOcean load balancer
+type LoadBalancer struct {
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	IP              string           `json:"ip"`
+	Status          string           `json:"status"`
+	Region          DropletRegion    `json:"region"`
+	ForwardingRules []ForwardingRule `json:"forwarding_rules"`
+	DropletIDs      []int            `json:"droplet_ids"`
+	Tags            []string         `json:"tag"`
+	SizeSlug        string           `json:"size_slug"`
+}
+
+// CreateLoadBalancerRequest is the payload for creating a load balancer
+type CreateLoadBalancerRequest struct {
+	Name            string           `json:"name"`
+	Region          string           `json:"region"`
+	SizeSlug        string           `json:"size_slug,omitempty"`
+	ForwardingRules []ForwardingRule `json:"forwarding_rules"`
+	DropletIDs      []int            `json:"droplet_ids,omitempty"`
+	Tags            []string         `json:"tag,omitempty"`
+}
+
+// CreateLoadBalancer creates a new load balancer
+func (c *Client) CreateLoadBalancer(req CreateLoadBalancerRequest) (*LoadBalancer, error) {
+	url := fmt.Sprintf("%s/load_balancers", c.BaseURL)
+	b, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
+	}
+	responseBody, err := c.execRequest(http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		LoadBalancer LoadBalancer `json:"load_balancer"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return &response.LoadBalancer, nil
+}
+
+// DeleteLoadBalancer deletes a load balancer by ID
+func (c *Client) DeleteLoadBalancer(lbID string) error {
+	url := fmt.Sprintf("%s/load_balancers/%s", c.BaseURL, lbID)
+	_, err := c.execRequest(http.MethodDelete, url, nil)
+	return err
+}
+
+// ListLoadBalancers retrieves all load balancers
+func (c *Client) ListLoadBalancers() ([]LoadBalancer, error) {
+	url := fmt.Sprintf("%s/load_balancers", c.BaseURL)
+	responseBody, err := c.execRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		LoadBalancers []LoadBalancer `json:"load_balancers"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return response.LoadBalancers, nil
+}
+
+// ReservedIPAction represents the result of a reserved IP action
+type ReservedIPAction struct {
+	ID     int    `json:"id"`
+	Status string `json:"status"`
+	Type   string `json:"type"`
+}
+
+// PostReservedIPAction performs an action on a reserved IP
+func (c *Client) PostReservedIPAction(reservedIP string, body map[string]any) (*ReservedIPAction, error) {
+	url := fmt.Sprintf("%s/reserved_ips/%s/actions", c.BaseURL, reservedIP)
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
+	}
+	responseBody, err := c.execRequest(http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Action ReservedIPAction `json:"action"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+	return &response.Action, nil
+}
